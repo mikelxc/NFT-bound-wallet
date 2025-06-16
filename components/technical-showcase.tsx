@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { Layers, Cpu, Puzzle, Zap } from "lucide-react"
+import TechnicalDiagram from "./technical-diagram"
 
 const features = [
   {
@@ -95,10 +96,7 @@ export default function TechnicalShowcase() {
           variants={itemVariants} // Re-use itemVariants for simplicity
           className="mt-12 text-center"
         >
-          {/* TODO: Implement Technical Diagram Animation */}
-          <div className="w-full max-w-2xl mx-auto h-64 bg-white/5 rounded-lg flex items-center justify-center border border-white/10">
-            <p className="text-white/50">Technical Diagram Animation Placeholder</p>
-          </div>
+          <TechnicalDiagram autoPlay={true} showControls={false} />
         </motion.div>
       </div>
     </section>

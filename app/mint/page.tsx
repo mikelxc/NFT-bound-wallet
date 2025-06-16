@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import Button from "@/components/button"
 import NbaCard from "@/components/nba-card"
 import { ArrowLeft, ArrowRight, CheckCircle, Loader, Sparkles } from "lucide-react"
+import TechnicalDiagram from "@/components/technical-diagram"
 
 const MOCK_CONFIG = {
   factoryAddress: "0x1234567890123456789012345678901234567890",
@@ -85,14 +86,16 @@ export default function MintPage() {
             exit="out"
             variants={pageVariants}
             transition={pageTransition}
-            className="text-center max-w-2xl mx-auto"
+            className="text-center max-w-4xl mx-auto"
           >
             <h1 className="text-3xl md:text-4xl font-bold mb-6 text-white/90">Welcome to NFT-Bound Accounts</h1>
-            {/* TODO: Implement Animated Technical Explanation */}
-            <div className="w-full h-64 bg-white/5 rounded-lg flex items-center justify-center border border-white/10 my-8">
-              <p className="text-white/50">Animated Technical Explanation Placeholder</p>
+
+            {/* Technical Diagram */}
+            <div className="my-8">
+              <TechnicalDiagram autoPlay={true} showControls={true} />
             </div>
-            <ul className="space-y-3 text-left text-white/70 mb-8 list-disc list-inside marker:text-[var(--gradient-start)]">
+
+            <ul className="space-y-3 text-left text-white/70 mb-8 list-disc list-inside marker:text-[var(--gradient-start)] max-w-2xl mx-auto">
               <li>Each NFT you mint controls a unique, fully-functional smart wallet.</li>
               <li>Transferring the NFT means transferring the entire wallet and its contents.</li>
               <li>Powered by ERC-7579 (Modular Smart Accounts) and ERC-721 (NFTs).</li>
