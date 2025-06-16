@@ -4,18 +4,40 @@ import { useParams } from "next/navigation" // For App Router
 import { useEffect, useState } from "react"
 import NbaCard from "@/components/nba-card"
 import Button from "@/components/button"
-import { ArrowUpRight, ArrowDownLeft, Repeat, Send, Download } from "lucide-react"
-import Loader from "@/components/loader" // Declare Loader variable
+import { ArrowUpRight, ArrowDownLeft, Repeat, Send, Download, Loader2 } from "lucide-react"
+import { createAlchemyClient, getAlchemyRpcUrl } from "@/lib/alchemy-client"
+import { createPublicClient, http, getContract } from "viem"
+import { createNBAClient } from "@/lib/nba-sdk"
+import { CONTRACT_ADDRESSES } from "@/lib/nba-sdk/constants"
+import TransactionModal from "@/components/transaction-modal"
+import NFTDisplay from "@/components/nft-display"
+import { useAccount } from "wagmi"
 
-// Mock data structure for an account
+// Define the chain configuration
+const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "1315")
+const RPC_URL = getAlchemyRpcUrl(CHAIN_ID)
+
+console.log("Debug - Chain ID:", CHAIN_ID)
+console.log("Debug - RPC URL:", RPC_URL)
+console.log("Debug - Factory Address:", process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS)
+
+// Account data structure
 interface AccountData {
   tokenId: string
   ethBalance: string
   transactionCount: number
   nftCount: number
   walletAddress: string
+  owner: string
+  isDeployed: boolean
   assets: Asset[]
   activity: ActivityItem[]
+}
+
+interface NFTPortfolioData {
+  nfts: any[]
+  totalCount: number
+  pageKey?: string
 }
 
 interface Asset {
@@ -24,7 +46,7 @@ interface Asset {
   symbol: string
   balance: string
   usdValue: string
-  iconUrl?: string // Optional: URL for token icon
+  iconUrl?: string
 }
 
 interface ActivityItem {
@@ -34,75 +56,122 @@ interface ActivityItem {
   amount?: string
   targetAddress?: string
   status: "confirmed" | "pending" | "failed"
+  hash?: string
 }
 
-// Mock function to fetch account data
+// Real function to fetch account data from blockchain using enhanced NBA SDK
 const fetchAccountData = async (tokenId: string): Promise<AccountData | null> => {
   console.log("Fetching data for token ID:", tokenId)
-  // TODO: Implement actual data fetching from blockchain/backend
-  // For now, return mock data
-  if (tokenId) {
+  
+  try {
+    // Create clients
+    const publicClient = createPublicClient({
+      transport: http(RPC_URL),
+    })
+
+    // Use environment variables for contract addresses, with fallback to constants
+    const factoryAddress = (process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS || CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory) as Address
+    const entryPoint = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.entryPoint || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789" as Address
+
+    console.log("Debug - Using factory address:", factoryAddress)
+    console.log("Debug - Using entry point:", entryPoint)
+
+    // Test basic contract connectivity
+    try {
+      const testContract = getContract({
+        address: factoryAddress,
+        abi: [{
+          inputs: [],
+          name: "name",
+          outputs: [{ name: "", type: "string" }],
+          stateMutability: "view",
+          type: "function"
+        }],
+        client: publicClient,
+      })
+      const contractName = await testContract.read.name()
+      console.log("Debug - Contract name:", contractName)
+    } catch (contractError) {
+      console.error("Debug - Contract connection failed:", contractError)
+    }
+
+    const nbaClient = createNBAClient(
+      {
+        chainId: CHAIN_ID,
+        factoryAddress,
+        entryPoint,
+      },
+      publicClient
+    )
+
+    // Get enhanced wallet metadata with Alchemy integration
+    const tokenIdBigInt = BigInt(parseInt(tokenId, 10))
+    console.log("Debug - Token ID BigInt:", tokenIdBigInt)
+    
+    // First check if the account exists
+    const account = await nbaClient.getAccount(tokenIdBigInt)
+    console.log("Debug - Account data:", account)
+    
+    if (!account) {
+      console.log("Debug - Account not found for token ID:", tokenId)
+      return null
+    }
+
+    const enhancedMetadata = await nbaClient.getEnhancedWalletMetadata(tokenIdBigInt)
+    console.log("Debug - Enhanced metadata:", enhancedMetadata)
+    
+    if (!enhancedMetadata) {
+      console.log("Debug - Enhanced metadata not found for token ID:", tokenId)
+      return null
+    }
+
+    // Convert enhanced metadata to AccountData format
+    const assets: Asset[] = enhancedMetadata.tokenBalances.map(token => ({
+      id: token.contractAddress,
+      name: token.name,
+      symbol: token.symbol,
+      balance: token.balance,
+      usdValue: "0", // Would need price API for real USD value
+      iconUrl: token.logo || (token.symbol === 'IP' ? "/ip-logo.png" : "/placeholder.svg"),
+    }))
+
+    const activity: ActivityItem[] = enhancedMetadata.transactionHistory.map(tx => ({
+      id: tx.hash,
+      type: tx.type === 'contract' ? 'contract_interaction' : tx.type,
+      date: new Date(tx.timestamp).toISOString().split('T')[0],
+      amount: `${tx.value} ${tx.asset}`,
+      targetAddress: tx.type === 'send' ? tx.to : tx.from,
+      status: tx.status === 'success' ? 'confirmed' : 'failed',
+      hash: tx.hash,
+    }))
+
     return {
       tokenId,
-      ethBalance: (Math.random() * 10).toFixed(2),
-      transactionCount: Math.floor(Math.random() * 200),
-      nftCount: Math.floor(Math.random() * 10),
-      walletAddress: `0x${tokenId.padStart(10, "0")}...${Math.random().toString(16).substring(2, 6)}`,
-      assets: [
-        {
-          id: "eth",
-          name: "Ethereum",
-          symbol: "ETH",
-          balance: (Math.random() * 10).toFixed(2),
-          usdValue: (Math.random() * 10 * 3000).toFixed(2),
-          iconUrl: "/ethereum-logo.png",
-        },
-        {
-          id: "usdc",
-          name: "USD Coin",
-          symbol: "USDC",
-          balance: (Math.random() * 5000).toFixed(2),
-          usdValue: (Math.random() * 5000).toFixed(2),
-          iconUrl: "/usdc-logo.png",
-        },
-      ],
-      activity: [
-        {
-          id: "1",
-          type: "receive",
-          date: "2024-06-15",
-          amount: "1.5 ETH",
-          targetAddress: "0xSENDER...",
-          status: "confirmed",
-        },
-        {
-          id: "2",
-          type: "send",
-          date: "2024-06-14",
-          amount: "0.2 ETH",
-          targetAddress: "0xRECIPIENT...",
-          status: "confirmed",
-        },
-        {
-          id: "3",
-          type: "contract_interaction",
-          date: "2024-06-13",
-          targetAddress: "0xCONTRACT...",
-          status: "confirmed",
-        },
-      ],
+      ethBalance: enhancedMetadata.balance,
+      transactionCount: enhancedMetadata.transactionCount,
+      nftCount: enhancedMetadata.nftCount,
+      walletAddress: enhancedMetadata.walletAddress,
+      owner: enhancedMetadata.owner,
+      isDeployed: enhancedMetadata.isDeployed,
+      assets,
+      activity,
     }
+  } catch (error) {
+    console.error("Error fetching account data:", error)
+    return null
   }
-  return null
 }
 
 export default function AccountPage() {
   const params = useParams()
   const tokenId = (params?.tokenId as string) || "default" // Handle potential array or undefined
+  const { address: connectedAddress } = useAccount()
 
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"assets" | "activity" | "nfts" | "trade">("assets")
+  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false)
+  const [transactionStatus, setTransactionStatus] = useState<string>("")
 
   useEffect(() => {
     if (tokenId) {
@@ -120,11 +189,95 @@ export default function AccountPage() {
     }
   }, [tokenId])
 
+  // Handle transaction sending
+  const handleSendTransaction = async (transaction: {
+    to: `0x${string}`
+    value?: bigint
+    data?: `0x${string}`
+  }) => {
+    if (!accountData || !connectedAddress) {
+      throw new Error("Not connected or account data not loaded")
+    }
+
+    // Check if connected wallet is the owner
+    if (connectedAddress.toLowerCase() !== accountData.owner.toLowerCase()) {
+      throw new Error("Only the NBA owner can send transactions")
+    }
+
+    try {
+      setTransactionStatus("Initializing smart account...")
+
+      // Create public client with chain
+      const { storyAeneid } = await import("@reown/appkit/networks")
+      const publicClient = createPublicClient({
+        chain: storyAeneid,
+        transport: http(RPC_URL),
+      })
+
+      // Get wallet client from wagmi (this is the owner wallet)
+      const { getWalletClient } = await import("wagmi/actions")
+      const { wagmiAdapter } = await import("@/lib/wallet/config")
+      const ownerWalletClient = await getWalletClient(wagmiAdapter.wagmiConfig, {
+        account: connectedAddress
+      })
+
+      if (!ownerWalletClient || !ownerWalletClient.account) {
+        throw new Error("Owner wallet not connected. Please make sure your wallet is connected.")
+      }
+
+      console.log("Owner wallet account:", ownerWalletClient.account.address)
+
+      setTransactionStatus("Creating smart account client...")
+
+      // Import smart account utilities
+      const { createSmartAccountConfig, createNBASmartAccountClient } = await import("@/lib/smart-account/client")
+      
+      // Create smart account config
+      const smartAccountConfig = createSmartAccountConfig(CHAIN_ID)
+      
+      // Create smart account client for the NBA wallet address
+      const smartAccountClient = await createNBASmartAccountClient(
+        smartAccountConfig,
+        accountData.walletAddress as `0x${string}`,
+        ownerWalletClient,
+        publicClient
+      )
+
+      setTransactionStatus("Preparing transaction...")
+
+      // Send transaction using smart account client (uses standard viem interface)
+      const hash = await smartAccountClient.sendTransaction({
+        to: transaction.to,
+        value: transaction.value || 0n,
+        data: transaction.data || "0x",
+      })
+
+      setTransactionStatus("Transaction submitted! Waiting for confirmation...")
+
+      // Wait for the transaction to be included in a block
+      const receipt = await smartAccountClient.waitForTransactionReceipt({
+        hash,
+      })
+
+      setTransactionStatus("Transaction confirmed!")
+
+      // Refresh account data after successful transaction
+      setTimeout(() => {
+        fetchAccountData(tokenId).then(setAccountData)
+      }, 3000)
+
+      return hash
+    } catch (error) {
+      console.error("Transaction failed:", error)
+      setTransactionStatus("Transaction failed")
+      throw error
+    }
+  }
+
   if (isLoading) {
-    // TODO: Implement Gradient Skeleton Screen
     return (
       <div className="min-h-screen flex items-center justify-center text-white/80">
-        <Loader className="w-12 h-12 animate-spin text-[var(--gradient-start)]" />
+        <Loader2 className="w-12 h-12 animate-spin text-[var(--gradient-start)]" />
         <p className="ml-4">Loading Account Data...</p>
       </div>
     )
@@ -133,9 +286,19 @@ export default function AccountPage() {
   if (!accountData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center text-white/80 p-4">
-        <h1 className="text-2xl font-bold mb-4">Account Not Found</h1>
-        <p className="mb-8">Could not load data for token ID: {tokenId}.</p>
-        <Button onClick={() => (window.location.href = "/")}>Go to Homepage</Button>
+        <h1 className="text-2xl font-bold mb-4">NBA Wallet Not Found</h1>
+        <p className="mb-4">Token ID {tokenId} doesn't exist or hasn't been minted yet.</p>
+        <p className="mb-8 text-white/60">
+          This could mean the NFT-Bound Account hasn't been created, or the token ID is invalid.
+        </p>
+        <div className="flex gap-4">
+          <Button onClick={() => (window.location.href = "/account")}>
+            View Gallery
+          </Button>
+          <Button variant="secondary" onClick={() => (window.location.href = "/mint")}>
+            Mint NBA
+          </Button>
+        </div>
       </div>
     )
   }
@@ -191,6 +354,11 @@ export default function AccountPage() {
                     <div>
                       <p className="font-semibold text-white/90 capitalize">{item.type.replace("_", " ")}</p>
                       <p className="text-xs text-white/60">{new Date(item.date).toLocaleDateString()}</p>
+                      {item.targetAddress && (
+                        <p className="text-xs text-white/50 font-mono">
+                          {item.type === 'send' ? 'To: ' : 'From: '}{item.targetAddress.slice(0, 10)}...{item.targetAddress.slice(-4)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
@@ -200,17 +368,53 @@ export default function AccountPage() {
                     >
                       {item.status}
                     </p>
+                    {item.hash && (
+                      <button
+                        onClick={() => window.open(`https://story-aeneid.explorer.io/tx/${item.hash}`, '_blank')}
+                        className="text-xs text-[var(--gradient-start)] hover:text-white/80 transition-colors"
+                      >
+                        View tx
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
             ) : (
-              <p className="text-center text-white/50 py-8">No recent activity.</p>
+              <p className="text-center text-white/50 py-8">
+                {accountData.isDeployed ? "No recent activity." : "No activity yet. Wallet will show transactions after deployment."}
+              </p>
             )}
           </div>
         )
       case "nfts":
-        // TODO: Implement NFT display
-        return <p className="text-center text-white/50 py-8">NFTs display coming soon.</p>
+        return (
+          <div className="space-y-6">
+            {/* NFT Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white/5 p-3 rounded-lg text-center">
+                <div className="text-lg font-bold text-white/90">{accountData.nftCount}</div>
+                <div className="text-xs text-white/60">Total NFTs</div>
+              </div>
+              <div className="bg-white/5 p-3 rounded-lg text-center">
+                <div className="text-lg font-bold text-white/90">-</div>
+                <div className="text-xs text-white/60">Collections</div>
+              </div>
+              <div className="bg-white/5 p-3 rounded-lg text-center">
+                <div className="text-lg font-bold text-white/90">-</div>
+                <div className="text-xs text-white/60">Est. Value</div>
+              </div>
+              <div className="bg-white/5 p-3 rounded-lg text-center">
+                <div className="text-lg font-bold text-white/90">
+                  {accountData.isDeployed ? "Active" : "Pending"}
+                </div>
+                <div className="text-xs text-white/60">Status</div>
+              </div>
+            </div>
+
+            {/* NFT Collection */}
+            <NFTDisplay walletAddress={accountData.walletAddress} />
+          </div>
+        )
       case "trade":
         return (
           <div className="text-center p-6 bg-white/5 rounded-lg">
@@ -223,23 +427,39 @@ export default function AccountPage() {
               <p className="font-semibold text-white/80">Account Contents:</p>
               <ul className="list-disc list-inside text-white/60">
                 <li>{accountData.ethBalance} ETH</li>
-                <li>{accountData.nftCount} other NFTs</li>
-                {/* TODO: List other significant assets */}
-                <li>Total Estimated Value: {/* TODO: Calculate total value */} ~$XXXX</li>
+                <li>{accountData.assets.length - 1} token types</li>
+                <li>{accountData.nftCount} NFTs</li>
+                <li>{accountData.transactionCount} transaction history</li>
+                <li>Deployment Status: {accountData.isDeployed ? 'Active' : 'Not Deployed'}</li>
               </ul>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-              {/* TODO: Implement actual marketplace linking logic */}
-              <Button variant="secondary" onClick={() => alert("Link to OpenSea")}>
+              <Button 
+                variant="secondary" 
+                onClick={() => alert("Marketplace integration coming soon")}
+                disabled
+              >
                 List on OpenSea
               </Button>
-              <Button variant="secondary" onClick={() => alert("Link to Blur")}>
+              <Button 
+                variant="secondary" 
+                onClick={() => alert("Marketplace integration coming soon")}
+                disabled
+              >
                 View on Blur
               </Button>
-              <Button variant="secondary" onClick={() => alert("Transfer NFT")}>
+              <Button 
+                variant="secondary" 
+                onClick={() => alert("Direct transfer integration coming soon")}
+                disabled
+              >
                 Direct Transfer NFT
               </Button>
-              <Button variant="secondary" onClick={() => alert("Bridge to L2")}>
+              <Button 
+                variant="secondary" 
+                onClick={() => alert("Bridge integration coming soon")}
+                disabled
+              >
                 Bridge Account to L2
               </Button>
             </div>
@@ -261,18 +481,43 @@ export default function AccountPage() {
             ethBalance={accountData.ethBalance}
             transactionCount={accountData.transactionCount}
             nftCount={accountData.nftCount}
-            isActive={true}
+            isActive={accountData.isDeployed}
             variant="detailed"
           />
+          
+          {/* Deployment Status */}
+          <div className="glass-panel p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`w-2 h-2 rounded-full ${accountData.isDeployed ? 'bg-green-500' : 'bg-yellow-500'}`} />
+              <span className="text-white/90 font-medium">
+                {accountData.isDeployed ? 'Wallet Deployed' : 'Wallet Not Deployed'}
+              </span>
+            </div>
+            <p className="text-xs text-white/60">
+              {accountData.isDeployed 
+                ? 'This wallet is active and has been deployed on-chain'
+                : 'This wallet exists as an NFT but hasn\'t been deployed yet. It will be deployed on first transaction.'
+              }
+            </p>
+          </div>
+
+          {/* Owner Info */}
+          <div className="glass-panel p-4">
+            <h3 className="text-white/90 font-medium mb-2">Owner</h3>
+            <p className="font-mono text-sm text-white/70 break-all">{accountData.owner}</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
-            <Button onClick={() => alert("Send Action")}>
+            <Button 
+              onClick={() => setIsTransactionModalOpen(true)} 
+              disabled={!accountData.isDeployed || !connectedAddress || connectedAddress.toLowerCase() !== accountData.owner.toLowerCase()}
+            >
               <Send className="mr-2 h-4 w-4" /> Send
             </Button>
-            <Button variant="secondary" onClick={() => alert("Receive Action")}>
+            <Button variant="secondary" onClick={() => alert("Show receive address")}>
               <Download className="mr-2 h-4 w-4" /> Receive
             </Button>
           </div>
-          {/* TODO: Add more actions like "Buy Crypto", "Swap Tokens" if needed */}
         </div>
 
         {/* Right Column: Tabs and Content */}
@@ -296,6 +541,15 @@ export default function AccountPage() {
           <div>{renderTabContent()}</div>
         </div>
       </div>
+
+      {/* Transaction Modal */}
+      <TransactionModal
+        isOpen={isTransactionModalOpen}
+        onClose={() => setIsTransactionModalOpen(false)}
+        onSubmit={handleSendTransaction}
+        walletAddress={accountData.walletAddress}
+        balance={accountData.ethBalance}
+      />
     </div>
   )
 }

@@ -1,16 +1,36 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import Button from "@/components/button"
-import { Search, Grid, List, ExternalLink, Copy, Check, Wallet } from "lucide-react"
+import { Search, Grid, List, ExternalLink, Copy, Check, Wallet, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { createAlchemyClient, getAlchemyRpcUrl } from "@/lib/alchemy-client"
+import { createPublicClient, http } from "viem"
+import { createNBAClient } from "@/lib/nba-sdk"
+import { CONTRACT_ADDRESSES } from "@/lib/nba-sdk/constants"
 
 // Replace the existing generateNFTSVG function with contract-compatible version
 import { generateNFTSVG, type WalletData } from "@/components/svg-generator"
 
+// Define the chain configuration
+const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "1315")
+const RPC_URL = getAlchemyRpcUrl(CHAIN_ID)
+
+// NFT data structure
+interface NFTData {
+  tokenId: string
+  owner: string
+  walletAddress: string
+  ethBalance: string
+  transactionCount: number
+  nftCount: number
+  mintDate: string
+  lastActivity: string
+}
+
 // Update the function call in the component
-const generateContractSVG = (nft: any) => {
+const generateContractSVG = (nft: NFTData) => {
   const walletData: WalletData = {
     tokenId: nft.tokenId,
     walletAddress: nft.walletAddress,
@@ -27,70 +47,6 @@ const generateContractSVG = (nft: any) => {
   })
 }
 
-// Update the NFT rendering to use dynamic SVG
-const allMintedNFTs = [
-  {
-    tokenId: "0001",
-    owner: "0x1234...5678",
-    walletAddress: "0x1234...5678",
-    ethBalance: "2.45",
-    transactionCount: 142,
-    nftCount: 5,
-    mintDate: "2024-06-15",
-    lastActivity: "2024-06-15",
-  },
-  {
-    tokenId: "0002",
-    owner: "0x2345...6789",
-    walletAddress: "0x2345...6789",
-    ethBalance: "1.23",
-    transactionCount: 89,
-    nftCount: 3,
-    mintDate: "2024-06-14",
-    lastActivity: "2024-06-14",
-  },
-  {
-    tokenId: "0003",
-    owner: "0x3456...7890",
-    walletAddress: "0x3456...7890",
-    ethBalance: "0.87",
-    transactionCount: 234,
-    nftCount: 12,
-    mintDate: "2024-06-13",
-    lastActivity: "2024-06-13",
-  },
-  {
-    tokenId: "0004",
-    owner: "0x4567...8901",
-    walletAddress: "0x4567...8901",
-    ethBalance: "5.12",
-    transactionCount: 67,
-    nftCount: 8,
-    mintDate: "2024-06-12",
-    lastActivity: "2024-06-12",
-  },
-  {
-    tokenId: "0005",
-    owner: "0x5678...9012",
-    walletAddress: "0x5678...9012",
-    ethBalance: "0.34",
-    transactionCount: 156,
-    nftCount: 2,
-    mintDate: "2024-06-11",
-    lastActivity: "2024-06-11",
-  },
-  {
-    tokenId: "0006",
-    owner: "0x6789...0123",
-    walletAddress: "0x6789...0123",
-    ethBalance: "3.78",
-    transactionCount: 298,
-    nftCount: 15,
-    mintDate: "2024-06-10",
-    lastActivity: "2024-06-10",
-  },
-]
-
 type ViewMode = "grid" | "list"
 type SortBy = "newest" | "oldest" | "balance" | "activity"
 
@@ -99,9 +55,79 @@ export default function AccountGalleryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [sortBy, setSortBy] = useState<SortBy>("newest")
   const [copiedAddress, setCopiedAddress] = useState<string>("")
+  const [nfts, setNfts] = useState<NFTData[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string>("")
 
-  // TODO: Replace with actual data fetching from blockchain
-  const [nfts, setNfts] = useState(allMintedNFTs)
+  // Load NFT collection data
+  useEffect(() => {
+    const loadNFTCollection = async () => {
+      try {
+        setIsLoading(true)
+        setError("")
+
+        // Create clients
+        const publicClient = createPublicClient({
+          transport: http(RPC_URL),
+        })
+
+        // Use environment variables for contract addresses, with fallback to constants
+        const factoryAddress = (process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS || CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory) as Address
+        const entryPoint = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.entryPoint || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789" as Address
+
+        console.log("Gallery Debug - Chain ID:", CHAIN_ID)
+        console.log("Gallery Debug - Factory Address:", factoryAddress)
+        console.log("Gallery Debug - RPC URL:", RPC_URL)
+
+        const nbaClient = createNBAClient(
+          {
+            chainId: CHAIN_ID,
+            factoryAddress,
+            entryPoint,
+          },
+          publicClient
+        )
+
+        // Load the first 50 NFTs from the contract using enhanced metadata
+        const nftData: NFTData[] = []
+        
+        // Start from token ID 0 since it exists in this NBA collection
+        // This is a simplified approach - in production you'd use events for better performance
+        for (let tokenId = 0n; tokenId < 50n; tokenId++) {
+          try {
+            const enhancedMetadata = await nbaClient.getEnhancedWalletMetadata(tokenId)
+            if (enhancedMetadata) {
+              nftData.push({
+                tokenId: tokenId.toString().padStart(4, '0'),
+                owner: enhancedMetadata.owner,
+                walletAddress: enhancedMetadata.walletAddress,
+                ethBalance: enhancedMetadata.balance,
+                transactionCount: enhancedMetadata.transactionCount,
+                nftCount: enhancedMetadata.nftCount,
+                mintDate: new Date().toISOString().split('T')[0], // Would need to get from mint event
+                lastActivity: enhancedMetadata.transactionHistory.length > 0 
+                  ? new Date(enhancedMetadata.transactionHistory[0].timestamp).toISOString().split('T')[0]
+                  : new Date().toISOString().split('T')[0],
+              })
+            }
+          } catch (tokenError) {
+            // Token doesn't exist, continue
+            console.debug(`Token ID ${tokenId} not found, skipping...`)
+            continue
+          }
+        }
+
+        setNfts(nftData)
+      } catch (err) {
+        console.error("Failed to load NFT collection:", err)
+        setError("Failed to load NFT collection. Please try again.")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadNFTCollection()
+  }, [])
 
   const copyAddress = (address: string) => {
     navigator.clipboard.writeText(address)
@@ -110,8 +136,50 @@ export default function AccountGalleryPage() {
   }
 
   const openInExplorer = (tokenId: string) => {
-    // TODO: Replace with actual explorer URL
-    window.open(`https://basescan.org/token/0xFACTORY_ADDRESS/${tokenId}`, "_blank")
+    const factoryAddress = CONTRACT_ADDRESSES[1315].nftWalletFactory
+    // Link to the NFT collection page on the explorer, not individual token
+    window.open(`https://story-aeneid.explorer.io/token/${factoryAddress}?tab=nft_transfers&a=${tokenId}`, "_blank")
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="container mx-auto px-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white/90 to-white/60">
+              NFT-BSA Gallery
+            </h1>
+            <p className="text-xl text-white/70 max-w-3xl mx-auto">
+              Loading NFT-Bound Smart Accounts from the blockchain...
+            </p>
+          </motion.div>
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-[var(--gradient-start)] mr-3" />
+            <span className="text-white/70">Loading collection...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="container mx-auto px-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white/90 to-white/60">
+              NFT-BSA Gallery
+            </h1>
+            <div className="text-center py-12">
+              <div className="text-red-400 mb-4">{error}</div>
+              <Button onClick={() => window.location.reload()}>Try Again</Button>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    )
   }
 
   // Filter and sort NFTs
