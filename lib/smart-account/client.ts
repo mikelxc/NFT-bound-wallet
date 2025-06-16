@@ -1,27 +1,36 @@
 import { createSmartAccountClient } from 'permissionless';
+import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { toSmartAccount, getUserOperationHash, entryPoint07Abi } from 'viem/account-abstraction';
-import { createPaymasterClient } from 'viem/account-abstraction';
 import { 
   Address, 
-  Hash, 
   WalletClient, 
   PublicClient, 
-  parseEther,
   http,
   Chain,
   Hex,
+  encodeFunctionData,
+  decodeFunctionData,
   encodeAbiParameters,
-  keccak256,
-  toHex,
   concat,
   pad,
-  size,
-  encodePacked
+  toHex,
 } from 'viem';
-import { SmartAccountClientConfig, TransactionRequest, BatchTransactionRequest } from './types';
-import { waitForUserOperationReceipt, validateTransactionRequest } from './utils';
-import { getAlchemyRpcUrl } from '@/lib/alchemy-client';
+import { SmartAccountClientConfig } from './types';
 import { CONTRACT_ADDRESSES } from '@/lib/nba-sdk/constants';
+
+// ERC-7579 Execute ABI for NBA wallets
+const ERC7579ExecuteAbi = [
+  {
+    inputs: [
+      { name: 'mode', type: 'bytes32' },
+      { name: 'executionCalldata', type: 'bytes' }
+    ],
+    name: 'execute',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function',
+  }
+] as const;
 
 // Define Story Aeneid chain
 const storyAeneid: Chain = {
@@ -122,26 +131,107 @@ async function createNBAKernelAccount({
     },
 
     async encodeCalls(calls) {
-      // For single call, return the call data directly
-      if (calls.length === 1) {
-        return calls[0].data || '0x';
+      if (calls.length === 0) {
+        throw new Error("No calls to encode");
       }
-      
-      // For multiple calls, encode as batch
-      // This would need to match your Kernel account's batch calling mechanism
-      return encodeAbiParameters(
-        [{ type: 'bytes[]' }],
-        [calls.map(call => call.data || '0x')]
-      );
+
+      // ERC-7579 encoding
+      let mode: Hex;
+      let executionCalldata: Hex;
+
+      if (calls.length === 1) {
+        // Single call mode
+        // mode: calltype (1 byte) + exectype (1 byte) + selector (4 bytes) + payload (26 bytes)
+        // CALLTYPE_SINGLE = 0x00, EXECTYPE_DEFAULT = 0x00
+        mode = "0x0000000000000000000000000000000000000000000000000000000000000000";
+        
+        const call = calls[0];
+        // For single call: abi.encodePacked(target, value, callData)
+        executionCalldata = concat([
+          call.to,
+          pad(toHex(call.value ?? 0n), { size: 32 }),
+          call.data ?? "0x"
+        ]);
+      } else {
+        // Batch call mode  
+        // CALLTYPE_BATCH = 0x01, EXECTYPE_DEFAULT = 0x00
+        mode = "0x0101000000000000000000000000000000000000000000000000000000000000";
+        
+        // For batch calls, encode as array of execution structs
+        executionCalldata = encodeAbiParameters(
+          [{
+            components: [
+              { name: 'target', type: 'address' },
+              { name: 'value', type: 'uint256' },
+              { name: 'callData', type: 'bytes' }
+            ],
+            name: 'executions',
+            type: 'tuple[]'
+          }],
+          [calls.map(call => ({
+            target: call.to,
+            value: call.value ?? 0n,
+            callData: call.data ?? "0x"
+          }))]
+        );
+      }
+
+      return encodeFunctionData({
+        abi: ERC7579ExecuteAbi,
+        functionName: "execute",
+        args: [mode, executionCalldata]
+      });
     },
 
     async decodeCalls(callData) {
-      // Decode calls from callData - simplified implementation
-      return [{
-        to: address, // This would need proper parsing
-        value: 0n,
-        data: callData,
-      }];
+      try {
+        const decoded = decodeFunctionData({
+          abi: ERC7579ExecuteAbi,
+          data: callData
+        });
+
+        if (decoded.functionName === "execute") {
+          const [mode, executionCalldata] = decoded.args;
+          
+          // Parse mode to determine call type
+          const modeBytes = mode.slice(2); // Remove 0x
+          const callType = parseInt(modeBytes.slice(0, 2), 16); // First byte
+          
+          if (callType === 0x01) {
+            // Batch call
+            // Decode execution calldata as array of structs
+            // This is a simplified decode - actual implementation would be more complex
+            return [{
+              to: address,
+              value: 0n,
+              data: executionCalldata
+            }];
+          } else {
+            // Single call - decode from packed data
+            // target (20 bytes) + value (32 bytes) + callData
+            const executionData = executionCalldata.slice(2);
+            const target = "0x" + executionData.slice(0, 40) as Address;
+            const value = BigInt("0x" + executionData.slice(40, 104));
+            const callDataHex = "0x" + executionData.slice(104) as Hex;
+            
+            return [{
+              to: target,
+              value,
+              data: callDataHex
+            }];
+          }
+        }
+
+        throw new Error(`Unknown function: ${decoded.functionName}`);
+      } catch (error) {
+        console.error("Failed to decode call data:", error);
+        // Fallback - return raw data
+        return [{
+          to: address,
+          value: 0n,
+          data: callData
+        }];
+      }
     },
 
     async getNonce(args) {
@@ -177,7 +267,7 @@ async function createNBAKernelAccount({
       return '0x' + 
         '1234567890123456789012345678901234567890123456789012345678901234' + // r (32 bytes)
         '1234567890123456789012345678901234567890123456789012345678901234' + // s (32 bytes)
-        '1c'; // v (recovery id)
+        '1c' as `0x${string}`; // v (recovery id)
     },
 
     async sign({ hash }) {
@@ -252,9 +342,13 @@ export async function createNBASmartAccountClient(
 ) {
   const chain = getChain(config.chainId);
   
-  // Create paymaster client
-  const paymasterClient = createPaymasterClient({
+  // Create Pimlico paymaster client
+  const paymasterClient = createPimlicoClient({
     transport: http(config.paymasterUrl),
+    entryPoint: {
+      address: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+      version: "0.7",
+    }
   });
 
   // Validate owner wallet account
@@ -296,180 +390,12 @@ export async function createNBASmartAccountClient(
     paymaster: paymasterClient,
     userOperation: {
       estimateFeesPerGas: async () => {
-        try {
-          // Use Pimlico bundler for gas estimation
-          const response = await fetch(config.bundlerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'pimlico_getUserOperationGasPrice',
-              params: [],
-            }),
-          });
-          const gasData = await response.json();
-          
-          if (gasData.result) {
-            return {
-              maxFeePerGas: BigInt(gasData.result.fast.maxFeePerGas),
-              maxPriorityFeePerGas: BigInt(gasData.result.fast.maxPriorityFeePerGas),
-            };
-          }
-          throw new Error('No gas price data');
-        } catch (error) {
-          console.warn('Failed to get gas price from Pimlico:', error);
-          // Fallback to public client
-          const gasPrice = await publicClient.getGasPrice();
-          return {
-            maxFeePerGas: gasPrice,
-            maxPriorityFeePerGas: gasPrice / 10n, // 10% of gas price
-          };
-        }
+        return (await paymasterClient.getUserOperationGasPrice()).fast;
       },
     },
   });
 
-  return {
-    smartAccountClient,
-    kernelAccount,
-    paymasterClient,
-    
-    /**
-     * Send a single transaction
-     */
-    async sendTransaction(
-      transaction: TransactionRequest,
-      onStatusUpdate?: (status: string, hash?: Hash) => void
-    ): Promise<Hash> {
-      // Validate transaction
-      const validation = validateTransactionRequest(transaction);
-      if (!validation.valid) {
-        throw new Error(validation.error);
-      }
-
-      onStatusUpdate?.("Preparing transaction...");
-
-      try {
-        // Send user operation
-        const userOpHash = await smartAccountClient.sendUserOperation({
-          calls: [{
-            to: transaction.to,
-            value: transaction.value || 0n,
-            data: transaction.data || '0x',
-          }],
-        });
-
-        onStatusUpdate?.("Transaction submitted! Waiting for confirmation...", userOpHash);
-
-        // Wait for user operation receipt
-        const status = await waitForUserOperationReceipt(smartAccountClient, userOpHash);
-        
-        if (status.status === 'failed') {
-          throw new Error('Transaction failed');
-        }
-
-        onStatusUpdate?.("Transaction confirmed!", status.transactionHash);
-        return status.transactionHash || userOpHash;
-      } catch (error) {
-        console.error('Transaction failed:', error);
-        throw error;
-      }
-    },
-
-    /**
-     * Send multiple transactions in a batch
-     */
-    async sendBatchTransaction(
-      batchRequest: BatchTransactionRequest,
-      onStatusUpdate?: (status: string, hash?: Hash) => void
-    ): Promise<Hash> {
-      // Validate all transactions
-      for (const transaction of batchRequest.transactions) {
-        const validation = validateTransactionRequest(transaction);
-        if (!validation.valid) {
-          throw new Error(`Invalid transaction: ${validation.error}`);
-        }
-      }
-
-      onStatusUpdate?.("Preparing batch transaction...");
-
-      try {
-        // Convert to calls format
-        const calls = batchRequest.transactions.map(tx => ({
-          to: tx.to,
-          value: tx.value || 0n,
-          data: tx.data || '0x',
-        }));
-
-        // Send batch user operation
-        const userOpHash = await smartAccountClient.sendUserOperation({
-          calls,
-        });
-
-        onStatusUpdate?.("Batch transaction submitted! Waiting for confirmation...", userOpHash);
-
-        // Wait for user operation receipt
-        const status = await waitForUserOperationReceipt(smartAccountClient, userOpHash);
-        
-        if (status.status === 'failed') {
-          throw new Error('Batch transaction failed');
-        }
-
-        onStatusUpdate?.("Batch transaction confirmed!", status.transactionHash);
-        return status.transactionHash || userOpHash;
-      } catch (error) {
-        console.error('Batch transaction failed:', error);
-        throw error;
-      }
-    },
-
-    /**
-     * Estimate gas for a transaction
-     */
-    async estimateGas(transaction: TransactionRequest): Promise<{
-      gas: bigint;
-      maxFeePerGas: bigint;
-      maxPriorityFeePerGas: bigint;
-    }> {
-      try {
-        const gasEstimate = await smartAccountClient.estimateUserOperationGas({
-          calls: [{
-            to: transaction.to,
-            value: transaction.value || 0n,
-            data: transaction.data || '0x',
-          }],
-        });
-
-        const feeData = await publicClient.getGasPrice();
-        const gasInfo = {
-          maxFeePerGas: feeData,
-          maxPriorityFeePerGas: feeData / 10n,
-        };
-
-        return {
-          gas: gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit,
-          maxFeePerGas: gasInfo.maxFeePerGas,
-          maxPriorityFeePerGas: gasInfo.maxPriorityFeePerGas,
-        };
-      } catch (error) {
-        console.error('Gas estimation failed:', error);
-        throw error;
-      }
-    },
-
-    /**
-     * Get user operation status
-     */
-    async getUserOperationStatus(hash: Hash) {
-      try {
-        const receipt = await smartAccountClient.getUserOperationReceipt({ hash });
-        return receipt;
-      } catch (error) {
-        return null;
-      }
-    },
-  };
+  return smartAccountClient;
 }
 
 /**

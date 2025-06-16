@@ -58,11 +58,14 @@ export default function TransactionModal({
     if (!recipient.startsWith('0x') || recipient.length !== 42) {
       throw new Error('Invalid recipient address format')
     }
-    if (amount && parseFloat(amount) <= 0) {
-      throw new Error('Amount must be greater than 0')
-    }
-    if (amount && parseFloat(amount) > parseFloat(balance)) {
-      throw new Error('Insufficient balance')
+    if (amount && amount.trim() !== '') {
+      const amountNumber = parseFloat(amount)
+      if (isNaN(amountNumber) || amountNumber <= 0) {
+        throw new Error('Amount must be a valid number greater than 0')
+      }
+      if (amountNumber > parseFloat(balance)) {
+        throw new Error('Insufficient balance')
+      }
     }
   }
 
@@ -74,8 +77,8 @@ export default function TransactionModal({
 
       const transaction = {
         to: recipient as Address,
-        value: amount ? parseEther(amount) : undefined,
-        data: data ? (data as `0x${string}`) : undefined,
+        value: amount && amount.trim() !== '' ? parseEther(amount) : undefined,
+        data: data && data.trim() !== '' ? (data as `0x${string}`) : undefined,
       }
 
       setStatus({ step: 'pending', message: 'Submitting transaction...' })

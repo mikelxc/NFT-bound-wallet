@@ -249,10 +249,16 @@ export default function AccountPage() {
       setTransactionStatus("Preparing transaction...")
 
       // Send transaction using smart account client (uses standard viem interface)
+      console.log("Sending transaction with smartAccountClient:", {
+        to: transaction.to,
+        value: transaction.value,
+        data: transaction.data,
+      });
+      
       const hash = await smartAccountClient.sendTransaction({
         to: transaction.to,
-        value: transaction.value || 0n,
-        data: transaction.data || "0x",
+        value: transaction.value,
+        data: transaction.data,
       })
 
       setTransactionStatus("Transaction submitted! Waiting for confirmation...")
@@ -550,7 +556,7 @@ export default function AccountPage() {
         isOpen={isTransactionModalOpen}
         onClose={() => setIsTransactionModalOpen(false)}
         onSubmit={handleSendTransaction}
-        walletAddress={accountData.walletAddress}
+        walletAddress={accountData.walletAddress as `0x${string}`}
         balance={accountData.ethBalance}
       />
     </div>
