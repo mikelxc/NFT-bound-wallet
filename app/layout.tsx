@@ -5,6 +5,7 @@ import "./globals.css"
 import { cn } from "@/lib/utils"
 import Background from "@/components/background"
 import Header from "@/components/header"
+import { WalletProvider } from "@/lib/wallet/providers"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -30,9 +31,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={cn("min-h-screen font-sans antialiased", inter.variable, jetbrainsMono.variable)}>
-        <Background />
-        <Header />
-        <main className="relative z-10">{children}</main>
+        <WalletProvider>
+          <Background />
+          <Header />
+          <main className="relative z-10">{children}</main>
+        </WalletProvider>
       </body>
     </html>
   )
