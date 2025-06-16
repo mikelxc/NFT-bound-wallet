@@ -1,11 +1,10 @@
 import { createAppKit } from '@reown/appkit/react';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { defineChain } from 'viem';
+import { storyAeneid } from '@reown/appkit/networks';
 import { cookieStorage, createStorage } from 'wagmi';
-import { storyAeneid } from 'viem/chains';
 
 // Define local chain for development
-export const localChain = storyAeneid;
+export const localChain = storyAeneid.network;
 
 // Define supported chains
 export const chains = [localChain];
@@ -24,14 +23,14 @@ export const wagmiAdapter = new WagmiAdapter({
   }),
   ssr: true,
   projectId,
-  networks: chains,
+  networks: [storyAeneid],
 });
 
 // Create modal configuration
 export const appKit = createAppKit({
   adapters: [wagmiAdapter],
   projectId,
-  networks: chains,
+  networks: [storyAeneid],
   metadata: {
     name: 'NFT-Bound Smart Accounts',
     description: 'Trade Your Wallet as an NFT',
