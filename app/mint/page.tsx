@@ -35,6 +35,7 @@ export default function MintPage() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [deterministicAddress, setDeterministicAddress] = useState<string>("")
+  const [nextTokenId, setNextTokenId] = useState<bigint>(0n)
   const [mintingFee, setMintingFee] = useState<bigint>(0n)
   const [error, setError] = useState<string>("")
 
@@ -71,10 +72,51 @@ export default function MintPage() {
 
         // If connected, compute next wallet address
         if (address) {
-          // Get next token ID (simplified - in production, you'd need to track total supply)
-          const nextTokenId = 0n // This would be fetched from contract
-          const walletAddress = await nbaClient.computeWalletAddress(nextTokenId)
-          setDeterministicAddress(walletAddress)
+          // Get the next token ID by checking total supply
+          try {
+            // Use getContract to read total supply from the factory
+            const { getContract } = await import('viem')
+            const { CONTRACT_ADDRESSES } = await import('@/lib/nba-sdk/constants')
+            const { createPublicClient, http } = await import('viem')
+            
+            const chainId = chain?.id || 1315
+            const addresses = CONTRACT_ADDRESSES[chainId as keyof typeof CONTRACT_ADDRESSES]
+            
+            if (addresses?.nftWalletFactory) {
+              const publicClient = createPublicClient({
+                chain: chain || undefined,
+                transport: http()
+              })
+              
+              const factory = getContract({
+                address: addresses.nftWalletFactory,
+                abi: [
+                  {
+                    inputs: [],
+                    name: 'totalSupply',
+                    outputs: [{ type: 'uint256' }],
+                    stateMutability: 'view',
+                    type: 'function',
+                  }
+                ],
+                client: publicClient
+              })
+              
+              const totalSupply = await factory.read.totalSupply()
+              const nextTokenId = totalSupply // Next token ID is usually totalSupply
+              setNextTokenId(nextTokenId)
+              
+              const walletAddress = await nbaClient.computeWalletAddress(nextTokenId)
+              setDeterministicAddress(walletAddress)
+            }
+          } catch (err) {
+            console.warn("Could not fetch next token ID, using fallback:", err)
+            // Fallback to a default computation
+            const fallbackTokenId = 0n
+            setNextTokenId(fallbackTokenId)
+            const walletAddress = await nbaClient.computeWalletAddress(fallbackTokenId)
+            setDeterministicAddress(walletAddress)
+          }
         }
       } catch (err) {
         console.error("Error fetching data:", err)
@@ -183,7 +225,15 @@ export default function MintPage() {
             ) : (
               <>
                 <div className="flex justify-center my-8">
-                  <NbaCard />
+                  <NbaCard 
+                    tokenId={nextTokenId.toString()}
+                    walletAddress={deterministicAddress}
+                    ethBalance="0.00"
+                    transactionCount={0}
+                    nftCount={0}
+                    isActive={false}
+                    useContractSVG={true}
+                  />
                 </div>
                 <div className="glass-panel p-6 rounded-xl space-y-3 text-sm text-white/80 mb-8">
                   <p>Minting Fee: {formatEther(mintingFee)} ETH</p>
@@ -277,8 +327,16 @@ export default function MintPage() {
               Congratulations! Your NFT-Bound Smart Account{" "}
               <span className="font-bold text-white/90">NBA #{mintResult?.tokenId.toString() || "XXXX"}</span> has been minted.
             </p>
-            <div className="my-8">
-              <NbaCard />
+            <div className="flex justify-center my-8">
+              <NbaCard 
+                tokenId={mintResult?.tokenId.toString() || nextTokenId.toString()}
+                walletAddress={mintResult?.walletAddress || deterministicAddress}
+                ethBalance="0.00"
+                transactionCount={0}
+                nftCount={0}
+                isActive={true}
+                useContractSVG={true}
+              />
             </div>
             <div className="glass-panel p-6 rounded-xl space-y-3 text-sm text-white/80 mb-8">
               <p>

@@ -8,18 +8,31 @@ export const SUPPORTED_CHAINS = {
     name: 'Story Aeneid',
     rpcUrl: 'https://rpc.story-aeneid.io',
   },
-  // TODO: Add mainnet and other testnet configurations
+  // Story Mainnet
+  STORY_MAINNET: {
+    id: 1514,
+    name: 'Story',
+    rpcUrl: 'https://rpc.story.foundation',
+  },
 } as const;
 
 // Contract addresses based on deployment
 export const CONTRACT_ADDRESSES = {
   1315: {
-    nftWalletFactory: '0x3A1888490fF7A5c0a6c568066A9E636985AEa44c' as Address,
-    nftBoundValidator: '0xAD021b41871D7aC878E7c3C8589B7e8E36C2Ee22' as Address,
-    kernelFactory: '0xD53A6E3EAbECaDfF73559aa1b7678738a84313ed' as Address,
-    entryPoint: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789' as Address, // Standard ERC-4337 EntryPoint
+    nftWalletFactory: '0x6bD76F8D71F796003385777d5666EFEdA01406F3' as Address,
+    nftBoundValidator: '0xe14458Ae8191593C5830873ea065Fa8522045875' as Address,
+    kernelFactory: '0xc2318B9b91dDc58EFB345a328883fc633c5b88F1' as Address,
+    entryPoint: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' as Address, // New EntryPoint
+    kernelImplementation: '0xFBA450Ca1fAd02E47f30e4006893545789087a8C' as Address,
   },
-  // TODO: Add addresses for other networks
+  1514: {
+    // Story mainnet addresses (update when deployed)
+    nftWalletFactory: '0x6bD76F8D71F796003385777d5666EFEdA01406F3' as Address,
+    nftBoundValidator: '0xe14458Ae8191593C5830873ea065Fa8522045875' as Address,
+    kernelFactory: '0xc2318B9b91dDc58EFB345a328883fc633c5b88F1' as Address,
+    entryPoint: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' as Address,
+    kernelImplementation: '0xFBA450Ca1fAd02E47f30e4006893545789087a8C' as Address,
+  },
 } as const;
 
 // Default values

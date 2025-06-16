@@ -8,6 +8,7 @@ import { generateNFTSVG, type WalletData } from "@/components/svg-generator"
 import { useConnectWallet, useWallet, useNBAClient } from "@/lib/wallet/hooks"
 import { useNBAStore } from "@/stores/nba-store"
 import { type NFTBoundAccount } from "@/lib/nba-sdk"
+import { CONTRACT_ADDRESSES } from "@/lib/nba-sdk/constants"
 import { useRouter } from "next/navigation"
 import { getExplorerTokenUrl } from "@/lib/utils"
 
@@ -51,7 +52,7 @@ export default function WalletPage() {
   }
 
   const openInExplorer = (tokenId: string) => {
-    const factoryAddress = process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS
+    const factoryAddress = CONTRACT_ADDRESSES[chainId as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory
     if (!factoryAddress) {
       console.error("NBA Factory address not configured")
       return
@@ -263,7 +264,7 @@ function NFTAccountCard({
           </Button>
           <Button
             variant="secondary"
-            onClick={() => window.open(`https://opensea.io/assets/story-aeneid/${process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS}/${account.tokenId.toString()}`, "_blank")}
+            onClick={() => window.open(`https://opensea.io/assets/story-aeneid/${CONTRACT_ADDRESSES[chainId as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory}/${account.tokenId.toString()}`, "_blank")}
             className="flex-1 text-sm"
           >
             Trade

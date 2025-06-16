@@ -19,7 +19,7 @@ const RPC_URL = getAlchemyRpcUrl(CHAIN_ID)
 
 console.log("Debug - Chain ID:", CHAIN_ID)
 console.log("Debug - RPC URL:", RPC_URL)
-console.log("Debug - Factory Address:", process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS)
+console.log("Debug - Factory Address:", CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory)
 
 // Account data structure
 interface AccountData {
@@ -70,8 +70,8 @@ const fetchAccountData = async (tokenId: string): Promise<AccountData | null> =>
     })
 
     // Use environment variables for contract addresses, with fallback to constants
-    const factoryAddress = (process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS || CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory) as Address
-    const entryPoint = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.entryPoint || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789" as Address
+    const factoryAddress = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory as Address
+    const entryPoint = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.entryPoint as Address
 
     console.log("Debug - Using factory address:", factoryAddress)
     console.log("Debug - Using entry point:", entryPoint)
@@ -195,6 +195,9 @@ export default function AccountPage() {
     value?: bigint
     data?: `0x${string}`
   }) => {
+    console.log("Received transaction:", transaction);
+    console.log("Transaction value:", transaction.value);
+    console.log("Transaction value type:", typeof transaction.value);
     if (!accountData || !connectedAddress) {
       throw new Error("Not connected or account data not loaded")
     }
@@ -254,8 +257,8 @@ export default function AccountPage() {
 
       setTransactionStatus("Transaction submitted! Waiting for confirmation...")
 
-      // Wait for the transaction to be included in a block
-      const receipt = await smartAccountClient.waitForTransactionReceipt({
+      // Wait for the transaction to be included in a block using public client
+      const receipt = await publicClient.waitForTransactionReceipt({
         hash,
       })
 

@@ -1,40 +1,10 @@
 import { Address, Hash, Hex } from 'viem';
 
-export interface NFTBoundAccount {
-  tokenId: bigint;
-  walletAddress: Address;
-  owner: Address;
-}
-
-export interface NBAConfig {
-  // Network config
+export interface SmartAccountClientConfig {
   chainId: number;
-  
-  // Contract addresses
-  factoryAddress: Address;
-  entryPoint: Address;
-  
-  // AA Infrastructure (optional)
-  bundlerUrl?: string;
-  paymasterUrl?: string;
-  
-  // Optional
-  projectId?: string; // Reown project ID
-}
-
-export interface MintResult {
-  tokenId: bigint;
-  walletAddress: Address;
-  transactionHash: Hash;
-}
-
-export interface WalletMetadata {
-  tokenId: string;
-  walletAddress: string;
-  balance: string;
-  transactionCount: number;
-  owner: string;
-  chainId: number;
+  bundlerUrl: string;
+  paymasterUrl: string;
+  alchemyApiKey: string;
 }
 
 export interface TransactionRequest {
@@ -47,7 +17,14 @@ export interface BatchTransactionRequest {
   transactions: TransactionRequest[];
 }
 
-// Enhanced types with Alchemy integration
+export interface UserOperationStatus {
+  hash: Hash;
+  status: 'pending' | 'included' | 'failed';
+  transactionHash?: Hash;
+  blockNumber?: bigint;
+  gasUsed?: bigint;
+}
+
 export interface TokenBalance {
   contractAddress: Address;
   name: string;
@@ -69,7 +46,13 @@ export interface TransactionHistoryItem {
   status: 'success' | 'failed';
 }
 
-export interface EnhancedWalletMetadata extends WalletMetadata {
+export interface EnhancedWalletMetadata {
+  tokenId: string;
+  walletAddress: Address;
+  owner: Address;
+  balance: string;
+  transactionCount: number;
+  chainId: number;
   isDeployed: boolean;
   tokenBalances: TokenBalance[];
   transactionHistory: TransactionHistoryItem[];

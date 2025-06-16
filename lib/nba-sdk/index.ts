@@ -10,9 +10,22 @@ import {
   parseAbiParameters,
   keccak256,
 } from 'viem';
-import { type NBAConfig, type NFTBoundAccount, type MintResult, type WalletMetadata } from './types';
+import { 
+  type NBAConfig, 
+  type NFTBoundAccount, 
+  type MintResult, 
+  type WalletMetadata,
+  type EnhancedWalletMetadata,
+  type TokenBalance,
+  type TransactionHistoryItem,
+  type TransactionRequest,
+  type BatchTransactionRequest
+} from './types';
 import { CONTRACT_ADDRESSES, HOOK_MODULE_NOT_INSTALLED } from './constants';
 import { nftWalletFactoryAbi, nftBoundValidatorAbi, kernelFactoryAbi } from './abi';
+import { createAlchemyClient } from '@/lib/alchemy-client';
+import { createNBASmartAccountClient, createSmartAccountConfig } from '@/lib/smart-account/client';
+import { Alchemy } from 'alchemy-sdk';
 
 export * from './types';
 export * from './constants';
@@ -21,10 +34,12 @@ export * from './abi';
 export class NBAClient {
   private config: NBAConfig;
   private publicClient: PublicClient;
+  private alchemy: Alchemy;
   
   constructor(config: NBAConfig, publicClient: PublicClient) {
     this.config = config;
     this.publicClient = publicClient;
+    this.alchemy = createAlchemyClient(config.chainId);
   }
 
   /**
@@ -200,6 +215,257 @@ export class NBAClient {
     }
 
     return accounts;
+  }
+
+  /**
+   * Get enhanced wallet metadata with Alchemy integration
+   */
+  async getEnhancedWalletMetadata(tokenId: bigint): Promise<EnhancedWalletMetadata | null> {
+    const baseMetadata = await this.getWalletMetadata(tokenId);
+    if (!baseMetadata) return null;
+
+    const account = await this.getAccount(tokenId);
+    if (!account) return null;
+
+    // Check if wallet is deployed
+    const isDeployed = baseMetadata.transactionCount > 0;
+
+    // Get token balances from Alchemy
+    const tokenBalances = await this.getTokenBalances(account.walletAddress);
+    
+    // Get transaction history from Alchemy
+    const transactionHistory = await this.getTransactionHistory(account.walletAddress);
+    
+    // Get NFT count from Alchemy
+    const nftCount = await this.getNFTCount(account.walletAddress);
+
+    return {
+      ...baseMetadata,
+      isDeployed,
+      tokenBalances,
+      transactionHistory,
+      nftCount,
+    };
+  }
+
+  /**
+   * Get token balances using Alchemy
+   */
+  async getTokenBalances(walletAddress: Address): Promise<TokenBalance[]> {
+    try {
+      const balances = await this.alchemy.core.getTokenBalances(walletAddress);
+      const tokenBalances: TokenBalance[] = [];
+
+      // Add native token (ETH/IP)
+      const nativeBalance = await this.publicClient.getBalance({ address: walletAddress });
+      tokenBalances.push({
+        contractAddress: '0x0000000000000000000000000000000000000000' as Address,
+        name: this.config.chainId === 1315 ? 'IP Token' : 'IP Token',
+        symbol: 'IP',
+        balance: formatEther(nativeBalance),
+        decimals: 18,
+      });
+
+      // Add ERC-20 tokens
+      for (const token of balances.tokenBalances) {
+        if (token.tokenBalance && token.tokenBalance !== '0x0') {
+          try {
+            const metadata = await this.alchemy.core.getTokenMetadata(token.contractAddress);
+            if (metadata.name && metadata.symbol) {
+              const balance = parseInt(token.tokenBalance, 16);
+              const decimals = metadata.decimals || 18;
+              const formattedBalance = (balance / Math.pow(10, decimals)).toFixed(6);
+              
+              tokenBalances.push({
+                contractAddress: token.contractAddress as Address,
+                name: metadata.name,
+                symbol: metadata.symbol,
+                balance: formattedBalance,
+                decimals,
+                logo: metadata.logo,
+              });
+            }
+          } catch (error) {
+            console.warn(`Failed to get metadata for token ${token.contractAddress}:`, error);
+          }
+        }
+      }
+
+      return tokenBalances;
+    } catch (error) {
+      console.warn('Failed to get token balances:', error);
+      // Return just native balance
+      const nativeBalance = await this.publicClient.getBalance({ address: walletAddress });
+      return [{
+        contractAddress: '0x0000000000000000000000000000000000000000' as Address,
+        name: 'IP Token',
+        symbol: 'IP',
+        balance: formatEther(nativeBalance),
+        decimals: 18,
+      }];
+    }
+  }
+
+  /**
+   * Get transaction history using Alchemy
+   */
+  async getTransactionHistory(walletAddress: Address): Promise<TransactionHistoryItem[]> {
+    try {
+      const [sentTransfers, receivedTransfers] = await Promise.all([
+        this.alchemy.core.getAssetTransfers({
+          fromAddress: walletAddress,
+          excludeZeroValue: true,
+          category: ['external', 'internal', 'erc20', 'erc721', 'erc1155'],
+          maxCount: 20,
+        }),
+        this.alchemy.core.getAssetTransfers({
+          toAddress: walletAddress,
+          excludeZeroValue: true,
+          category: ['external', 'internal', 'erc20', 'erc721', 'erc1155'],
+          maxCount: 20,
+        }),
+      ]);
+
+      const allTransfers = [
+        ...sentTransfers.transfers.map(t => ({ ...t, type: 'send' as const })),
+        ...receivedTransfers.transfers.map(t => ({ ...t, type: 'receive' as const })),
+      ].sort((a, b) => 
+        new Date(b.metadata.blockTimestamp).getTime() - new Date(a.metadata.blockTimestamp).getTime()
+      );
+
+      return allTransfers.slice(0, 20).map(transfer => ({
+        hash: transfer.hash as Hash,
+        blockNumber: BigInt(transfer.blockNum),
+        timestamp: transfer.metadata.blockTimestamp,
+        from: transfer.from as Address,
+        to: transfer.to as Address,
+        value: transfer.value?.toString() || '0',
+        asset: transfer.asset || 'IP',
+        type: transfer.type,
+        status: 'success' as const,
+      }));
+    } catch (error) {
+      console.warn('Failed to get transaction history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get NFT count using Alchemy
+   */
+  async getNFTCount(walletAddress: Address): Promise<number> {
+    try {
+      const nfts = await this.alchemy.nft.getNftsForOwner(walletAddress, {
+        pageSize: 1,
+      });
+      return nfts.totalCount || 0;
+    } catch (error) {
+      console.warn('Failed to get NFT count:', error);
+      // Fallback: could implement a backup method or return 0
+      return 0;
+    }
+  }
+
+  /**
+   * Get detailed NFT portfolio using Alchemy
+   */
+  async getNFTPortfolio(walletAddress: Address, pageSize: number = 20, pageKey?: string) {
+    try {
+      const response = await this.alchemy.nft.getNftsForOwner(walletAddress, {
+        pageSize,
+        pageKey,
+        omitMetadata: false, // Include full metadata
+      });
+
+      return {
+        nfts: response.ownedNfts.map(nft => ({
+          contractAddress: nft.contract.address,
+          tokenId: nft.tokenId,
+          name: nft.name || `${nft.contract.symbol || 'Unknown'} #${nft.tokenId}`,
+          description: nft.description,
+          image: nft.image.originalUrl || nft.image.thumbnailUrl || nft.image.pngUrl || '',
+          collection: {
+            name: nft.contract.name || nft.contract.symbol,
+            floorPrice: nft.contract.openSeaMetadata?.floorPrice,
+          },
+          tokenType: nft.tokenType,
+          timeLastUpdated: nft.timeLastUpdated,
+        })),
+        totalCount: response.totalCount,
+        pageKey: response.pageKey,
+      };
+    } catch (error) {
+      console.warn('Failed to get NFT portfolio:', error);
+      return {
+        nfts: [],
+        totalCount: 0,
+        pageKey: undefined,
+      };
+    }
+  }
+
+  /**
+   * Create smart account client for this NBA wallet
+   */
+  async createSmartAccountClient(
+    tokenId: bigint,
+    ownerWallet: WalletClient
+  ) {
+    const account = await this.getAccount(tokenId);
+    if (!account) {
+      throw new Error('NBA wallet not found');
+    }
+
+    const config = createSmartAccountConfig(this.config.chainId);
+    
+    return await createNBASmartAccountClient(
+      config,
+      account.walletAddress,
+      ownerWallet,
+      this.publicClient
+    );
+  }
+
+  /**
+   * Send transaction using smart account
+   */
+  async sendTransaction(
+    tokenId: bigint,
+    ownerWallet: WalletClient,
+    transaction: TransactionRequest,
+    onStatusUpdate?: (status: string, hash?: Hash) => void
+  ): Promise<Hash> {
+    const smartAccountClient = await this.createSmartAccountClient(tokenId, ownerWallet);
+    return await smartAccountClient.sendTransaction(transaction, onStatusUpdate);
+  }
+
+  /**
+   * Send batch transaction using smart account
+   */
+  async sendBatchTransaction(
+    tokenId: bigint,
+    ownerWallet: WalletClient,
+    batchRequest: BatchTransactionRequest,
+    onStatusUpdate?: (status: string, hash?: Hash) => void
+  ): Promise<Hash> {
+    const smartAccountClient = await this.createSmartAccountClient(tokenId, ownerWallet);
+    return await smartAccountClient.sendBatchTransaction(batchRequest, onStatusUpdate);
+  }
+
+  /**
+   * Estimate gas for transaction
+   */
+  async estimateTransactionGas(
+    tokenId: bigint,
+    ownerWallet: WalletClient,
+    transaction: TransactionRequest
+  ): Promise<{
+    gas: bigint;
+    maxFeePerGas: bigint;
+    maxPriorityFeePerGas: bigint;
+  }> {
+    const smartAccountClient = await this.createSmartAccountClient(tokenId, ownerWallet);
+    return await smartAccountClient.estimateGas(transaction);
   }
 
   /**

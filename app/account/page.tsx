@@ -72,8 +72,8 @@ export default function AccountGalleryPage() {
         })
 
         // Use environment variables for contract addresses, with fallback to constants
-        const factoryAddress = (process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS || CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory) as Address
-        const entryPoint = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.entryPoint || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789" as Address
+        const factoryAddress = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.nftWalletFactory as Address
+        const entryPoint = CONTRACT_ADDRESSES[CHAIN_ID as keyof typeof CONTRACT_ADDRESSES]?.entryPoint as Address
 
         console.log("Gallery Debug - Chain ID:", CHAIN_ID)
         console.log("Gallery Debug - Factory Address:", factoryAddress)
