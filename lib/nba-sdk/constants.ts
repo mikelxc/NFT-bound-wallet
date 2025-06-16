@@ -2,13 +2,13 @@ import { Address } from 'viem';
 
 // Chain configuration
 export const SUPPORTED_CHAINS = {
-  // Local network from deployment
-  LOCAL: {
+  // Story Aeneid testnet
+  STORY_AENEID: {
     id: 1514,
-    name: 'Local Network',
-    rpcUrl: 'http://localhost:8545',
+    name: 'Story Aeneid',
+    rpcUrl: 'https://rpc.story-aeneid.io',
   },
-  // TODO: Add mainnet and testnet configurations
+  // TODO: Add mainnet and other testnet configurations
 } as const;
 
 // Contract addresses based on deployment
