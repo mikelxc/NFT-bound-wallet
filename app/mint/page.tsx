@@ -1,18 +1,15 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Button from "@/components/button"
 import NbaCard from "@/components/nba-card"
-import { ArrowLeft, ArrowRight, CheckCircle, Loader, Sparkles } from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle, Loader, Sparkles, Wallet } from "lucide-react"
 import TechnicalDiagram from "@/components/technical-diagram"
-
-const MOCK_CONFIG = {
-  factoryAddress: "0x1234567890123456789012345678901234567890",
-  validatorAddress: "0x2345678901234567890123456789012345678901",
-  bundlerUrl: "https://api.pimlico.io/v2/bundler",
-  chainId: 8453, // Base
-}
+import { useConnectWallet, useWallet, useNBAClient } from "@/lib/wallet/hooks"
+import { useNBAStore } from "@/stores/nba-store"
+import { formatEther } from "viem"
+import { useRouter } from "next/navigation"
 
 const steps = [
   { id: 1, name: "Introduction" },
@@ -34,46 +31,70 @@ const pageTransition = {
 }
 
 export default function MintPage() {
+  const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
-  const [isMinting, setIsMinting] = useState(false)
-  // TODO: Store actual minted token ID and address
-  const [mintedTokenId, setMintedTokenId] = useState<string | null>(null)
-  const [deterministicAddress, setDeterministicAddress] = useState<string>("0xPREDICTED_ADDRESS...")
+  const [deterministicAddress, setDeterministicAddress] = useState<string>("")
+  const [mintingFee, setMintingFee] = useState<bigint>(0n)
+  const [error, setError] = useState<string>("")
+
+  // Wallet hooks
+  const { connect, isConnected } = useConnectWallet()
+  const { address, walletClient } = useWallet()
+  const nbaClient = useNBAClient()
+  
+  // Store hooks
+  const { isMinting, mintResult, setMinting, setMintResult, setError: setStoreError } = useNBAStore()
 
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, steps.length))
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1))
 
+  // Fetch minting fee and deterministic address
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!nbaClient) return
+
+      try {
+        // Get minting fee
+        const fee = await nbaClient.getMintingFee()
+        setMintingFee(fee)
+
+        // If connected, compute next wallet address
+        if (address) {
+          // Get next token ID (simplified - in production, you'd need to track total supply)
+          const nextTokenId = 0n // This would be fetched from contract
+          const walletAddress = await nbaClient.computeWalletAddress(nextTokenId)
+          setDeterministicAddress(walletAddress)
+        }
+      } catch (err) {
+        console.error("Error fetching data:", err)
+      }
+    }
+
+    fetchData()
+  }, [nbaClient, address])
+
   const handleMint = async () => {
-    setIsMinting(true)
-    // TODO: Implement actual minting logic with Viem and Reown AppKit
-    // 1. Connect wallet if not connected
-    // 2. Call factory contract to mint NFT and deploy smart account
-    // 3. Handle transaction states (pending, success, error)
-    console.log("Attempting to mint with config:", MOCK_CONFIG)
+    if (!isConnected || !walletClient || !address || !nbaClient) {
+      setError("Please connect your wallet first")
+      return
+    }
 
-    // Simulate minting process
-    await new Promise((resolve) => setTimeout(resolve, 3000)) // Simulate network delay
+    setMinting(true)
+    setError("")
 
-    // Simulate success
-    const newMintedId = Math.floor(Math.random() * 10000)
-      .toString()
-      .padStart(4, "0")
-    setMintedTokenId(newMintedId)
-    console.log("Minting successful, token ID:", newMintedId)
-    setIsMinting(false)
-    nextStep() // Move to success step
+    try {
+      // Mint NFT-bound account
+      const result = await nbaClient.mintAccount(address, walletClient)
+      
+      console.log("Minting successful:", result)
+      setMintResult(result)
+      nextStep() // Move to success step
+    } catch (err: any) {
+      console.error("Minting failed:", err)
+      setError(err.message || "Failed to mint NFT-bound account")
+      setMinting(false)
+    }
   }
-
-  // TODO: Calculate deterministic address based on user's wallet / chosen params
-  // This is a placeholder.
-  React.useEffect(
-    () => {
-      // setDeterministicAddress(calculateDeterministicAddress());
-    },
-    [
-      /* user wallet, other params */
-    ],
-  )
 
   const renderStepContent = () => {
     switch (currentStep) {
@@ -118,41 +139,58 @@ export default function MintPage() {
             className="text-center max-w-2xl mx-auto"
           >
             <h1 className="text-3xl md:text-4xl font-bold mb-6 text-white/90">Your Account Preview</h1>
-            <div className="flex justify-center my-8">
-              {/* TODO: Make this NBA card dynamic based on potential mint */}
-              <NbaCard />
-            </div>
-            <div className="glass-panel p-6 rounded-xl space-y-3 text-sm text-white/80 mb-8">
-              <p>Minting Fee: {/* TODO: Fetch actual fee */}0.01 ETH (example)</p>
-              <p>Estimated Gas: {/* TODO: Estimate gas */}~0.002 ETH (example)</p>
-              <p>
-                Deterministic Wallet Address: <span className="font-mono">{deterministicAddress}</span>
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button variant="secondary" onClick={prevStep} className="w-full sm:w-auto">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back
-              </Button>
-              <Button onClick={handleMint} disabled={isMinting} className="w-full sm:w-auto">
-                {isMinting ? (
-                  <>
-                    <Loader className="mr-2 h-4 w-4 animate-spin" /> Minting...
-                  </>
-                ) : (
-                  <>
-                    Mint Account NFT <Sparkles className="ml-2 h-4 w-4" />
-                  </>
+            
+            {!isConnected ? (
+              <div className="glass-panel p-8 rounded-xl mb-8">
+                <Wallet className="w-12 h-12 text-white/60 mx-auto mb-4" />
+                <p className="text-white/70 mb-4">Connect your wallet to continue</p>
+                <Button onClick={connect}>
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Connect Wallet
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-center my-8">
+                  <NbaCard />
+                </div>
+                <div className="glass-panel p-6 rounded-xl space-y-3 text-sm text-white/80 mb-8">
+                  <p>Minting Fee: {formatEther(mintingFee)} ETH</p>
+                  <p>Network: Story Aeneid (Chain ID: 1514)</p>
+                  {deterministicAddress && (
+                    <p>
+                      Your Wallet Address: <span className="font-mono">{deterministicAddress}</span>
+                    </p>
+                  )}
+                </div>
+                
+                {error && (
+                  <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 mb-4">
+                    <p className="text-red-400 text-sm">{error}</p>
+                  </div>
                 )}
-              </Button>
-            </div>
+                
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button variant="secondary" onClick={prevStep} className="w-full sm:w-auto">
+                    <ArrowLeft className="mr-2 h-4 w-4" /> Back
+                  </Button>
+                  <Button onClick={handleMint} disabled={isMinting} className="w-full sm:w-auto">
+                    {isMinting ? (
+                      <>
+                        <Loader className="mr-2 h-4 w-4 animate-spin" /> Minting...
+                      </>
+                    ) : (
+                      <>
+                        Mint Account NFT <Sparkles className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
           </motion.div>
         )
-      case 3: // Minting Animation (This step is now part of handleMint and transitions to success)
-        // This case is effectively skipped by the logic in handleMint,
-        // which sets isMinting and then calls nextStep upon completion.
-        // A dedicated "Minting in Progress" screen could be here if desired.
-        // For now, the button shows "Minting..." and then moves to Success.
-        // This is a placeholder if a more elaborate full-screen animation is needed.
+      case 3: // Minting Animation
         return (
           <motion.div
             key="step3"
@@ -168,14 +206,6 @@ export default function MintPage() {
             <p className="text-white/70">
               Please wait while we deploy your smart account and mint your NFT. This may take a few moments.
             </p>
-            {/* TODO: Implement epic minting animation (5 seconds, cinematic) */}
-            {/* - Particles coalesce into card */}
-            {/* - Gradient pulses with blockchain confirmation */}
-            {/* - Card flips to reveal wallet address */}
-            {/* - Celebration with subtle particle burst */}
-            <div className="w-full h-64 bg-white/5 rounded-lg flex items-center justify-center border border-white/10 my-8">
-              <p className="text-white/50">Cinematic Minting Animation Placeholder</p>
-            </div>
           </motion.div>
         )
       case 4: // Success
@@ -193,29 +223,32 @@ export default function MintPage() {
             <h1 className="text-3xl md:text-4xl font-bold mb-4 text-white/90">Minting Successful!</h1>
             <p className="text-white/70 mb-8">
               Congratulations! Your NFT-Bound Smart Account{" "}
-              <span className="font-bold text-white/90">NBA #{mintedTokenId || "XXXX"}</span> has been minted.
+              <span className="font-bold text-white/90">NBA #{mintResult?.tokenId.toString() || "XXXX"}</span> has been minted.
             </p>
             <div className="my-8">
-              <NbaCard /> {/* TODO: Update this card with actual minted data */}
+              <NbaCard />
             </div>
             <div className="glass-panel p-6 rounded-xl space-y-3 text-sm text-white/80 mb-8">
               <p>
-                Token ID: <span className="font-mono text-white/90">{mintedTokenId || "N/A"}</span>
+                Token ID: <span className="font-mono text-white/90">{mintResult?.tokenId.toString() || "N/A"}</span>
               </p>
               <p>
-                Wallet Address: <span className="font-mono text-white/90">{deterministicAddress}</span>
+                Wallet Address: <span className="font-mono text-white/90">{mintResult?.walletAddress || deterministicAddress}</span>
               </p>
-              {/* TODO: Add link to view on explorer */}
               <p>
-                <a href="#" className="text-[var(--gradient-start)] hover:underline">
-                  View on Explorer (placeholder)
+                <a 
+                  href={`https://explorer.story-aeneid.io/tx/${mintResult?.transactionHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--gradient-start)] hover:underline"
+                >
+                  View on Explorer
                 </a>
               </p>
             </div>
             <Button
               onClick={() => {
-                // TODO: Navigate to account page: router.push(`/account/${mintedTokenId}`)
-                alert(`Navigate to /account/${mintedTokenId || "your_new_token_id"}`)
+                router.push(`/account/${mintResult?.tokenId.toString() || "0"}`)
               }}
               className="w-full sm:w-auto"
             >
@@ -233,7 +266,7 @@ export default function MintPage() {
       {/* Progress Indicator */}
       <div className="mb-12 w-full max-w-md">
         <div className="flex justify-between mb-1">
-          {steps.map((step, index) => (
+          {steps.map((step) => (
             <span
               key={step.id}
               className={`text-xs font-medium ${currentStep >= step.id ? "text-white/90" : "text-white/40"}`}

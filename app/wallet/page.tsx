@@ -1,93 +1,83 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import Button from "@/components/button"
-import { Wallet, ExternalLink, Copy, Check } from "lucide-react"
+import { Wallet, ExternalLink, Copy, Check, Loader } from "lucide-react"
 import { generateNFTSVG, type WalletData } from "@/components/svg-generator"
-
-// Mock data for NFT gallery
-const mockNFTs = [
-  {
-    tokenId: "0001",
-    walletAddress: "0x1234...5678",
-    ethBalance: "2.45",
-    transactionCount: 142,
-    nftCount: 5,
-  },
-  {
-    tokenId: "0002",
-    walletAddress: "0x2345...6789",
-    ethBalance: "1.23",
-    transactionCount: 89,
-    nftCount: 3,
-  },
-  {
-    tokenId: "0003",
-    walletAddress: "0x3456...7890",
-    ethBalance: "0.87",
-    transactionCount: 234,
-    nftCount: 12,
-  },
-]
-
-const generateContractSVG = (nft: any) => {
-  const walletData: WalletData = {
-    tokenId: nft.tokenId,
-    walletAddress: nft.walletAddress,
-    balance: nft.ethBalance,
-    transactionCount: nft.transactionCount,
-    nftCount: nft.nftCount,
-    isActive: true,
-  }
-
-  return generateNFTSVG(walletData, {
-    width: 350,
-    height: 220,
-    animations: true,
-  })
-}
+import { useConnectWallet, useWallet, useNBAClient } from "@/lib/wallet/hooks"
+import { useNBAStore } from "@/stores/nba-store"
+import { type NFTBoundAccount } from "@/lib/nba-sdk"
+import { useRouter } from "next/navigation"
 
 export default function WalletPage() {
-  const [isConnected, setIsConnected] = useState(false)
-  const [connectedAddress, setConnectedAddress] = useState<string>("")
-  const [ownedNFTs, setOwnedNFTs] = useState<typeof mockNFTs>([])
+  const router = useRouter()
   const [copiedAddress, setCopiedAddress] = useState<string>("")
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
 
-  // TODO: Replace with actual wallet connection logic
-  const connectWallet = async () => {
-    try {
-      // Simulate wallet connection
-      console.log("Connecting wallet...")
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+  // Wallet hooks
+  const { connect, isConnected } = useConnectWallet()
+  const { address } = useWallet()
+  const nbaClient = useNBAClient()
 
-      const mockAddress = "0x1234567890123456789012345678901234567890"
-      setConnectedAddress(mockAddress)
-      setIsConnected(true)
+  // Store hooks
+  const { nftAccounts, setAccounts, setError } = useNBAStore()
 
-      // TODO: Fetch actual owned NFTs from blockchain
-      // For now, show mock data if connected
-      setOwnedNFTs(mockNFTs)
-    } catch (error) {
-      console.error("Failed to connect wallet:", error)
+  // Fetch owned NFTs when connected
+  useEffect(() => {
+    const fetchOwnedNFTs = async () => {
+      if (!isConnected || !address || !nbaClient) return
+
+      setLoadingAccounts(true)
+      try {
+        const accounts = await nbaClient.getOwnedAccounts(address)
+        setAccounts(accounts)
+      } catch (err: any) {
+        console.error("Failed to fetch owned NFTs:", err)
+        setError(err.message || "Failed to load NFT accounts")
+      } finally {
+        setLoadingAccounts(false)
+      }
     }
-  }
 
-  const disconnectWallet = () => {
-    setIsConnected(false)
-    setConnectedAddress("")
-    setOwnedNFTs([])
-  }
+    fetchOwnedNFTs()
+  }, [isConnected, address, nbaClient, setAccounts, setError])
 
-  const copyAddress = (address: string) => {
-    navigator.clipboard.writeText(address)
-    setCopiedAddress(address)
+  const copyAddress = (addr: string) => {
+    navigator.clipboard.writeText(addr)
+    setCopiedAddress(addr)
     setTimeout(() => setCopiedAddress(""), 2000)
   }
 
   const openInExplorer = (tokenId: string) => {
-    // TODO: Replace with actual explorer URL
-    window.open(`https://basescan.org/token/0xFACTORY_ADDRESS/${tokenId}`, "_blank")
+    window.open(`https://explorer.story-aeneid.io/token/${process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS}/${tokenId}`, "_blank")
+  }
+
+  const generateContractSVG = async (account: NFTBoundAccount) => {
+    if (!nbaClient) return ""
+
+    try {
+      const metadata = await nbaClient.getWalletMetadata(account.tokenId)
+      if (!metadata) return ""
+
+      const walletData: WalletData = {
+        tokenId: metadata.tokenId,
+        walletAddress: metadata.walletAddress,
+        balance: metadata.balance,
+        transactionCount: metadata.transactionCount,
+        nftCount: 0, // This could be fetched separately
+        isActive: true,
+      }
+
+      return generateNFTSVG(walletData, {
+        width: 350,
+        height: 220,
+        animations: true,
+      })
+    } catch (err) {
+      console.error("Failed to generate SVG:", err)
+      return ""
+    }
   }
 
   return (
@@ -111,7 +101,7 @@ export default function WalletPage() {
                 <Wallet className="w-12 h-12 text-white/60 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-white/90 mb-2">Connect Your Wallet</h3>
                 <p className="text-white/60 mb-4">Connect your wallet to view your NFT-bound accounts</p>
-                <Button onClick={connectWallet}>
+                <Button onClick={connect}>
                   <Wallet className="mr-2 h-4 w-4" />
                   Connect Wallet
                 </Button>
@@ -124,22 +114,19 @@ export default function WalletPage() {
                 </div>
                 <div className="flex items-center gap-2 mb-4">
                   <span className="font-mono text-white/80">
-                    {connectedAddress.slice(0, 6)}...{connectedAddress.slice(-4)}
+                    {address?.slice(0, 6)}...{address?.slice(-4)}
                   </span>
                   <button
-                    onClick={() => copyAddress(connectedAddress)}
+                    onClick={() => address && copyAddress(address)}
                     className="p-1 hover:bg-white/10 rounded transition-colors"
                   >
-                    {copiedAddress === connectedAddress ? (
+                    {copiedAddress === address ? (
                       <Check className="w-4 h-4 text-green-500" />
                     ) : (
                       <Copy className="w-4 h-4 text-white/60" />
                     )}
                   </button>
                 </div>
-                <Button variant="secondary" onClick={disconnectWallet}>
-                  Disconnect
-                </Button>
               </div>
             )}
           </div>
@@ -150,83 +137,24 @@ export default function WalletPage() {
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <h2 className="text-2xl font-bold text-white/90 mb-8 text-center">Your NFT-Bound Accounts</h2>
 
-            {ownedNFTs.length > 0 ? (
+            {loadingAccounts ? (
+              <div className="text-center py-12">
+                <Loader className="w-12 h-12 text-white/60 animate-spin mx-auto mb-4" />
+                <p className="text-white/60">Loading your NFT accounts...</p>
+              </div>
+            ) : nftAccounts.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {ownedNFTs.map((nft, index) => (
-                  <motion.div
-                    key={nft.tokenId}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="glass-panel p-6 rounded-2xl hover:border-[var(--gradient-start)]/50 transition-colors"
-                  >
-                    {/* SVG Display */}
-                    <div
-                      className="w-full h-48 mb-4 rounded-lg overflow-hidden"
-                      dangerouslySetInnerHTML={{ __html: generateContractSVG(nft) }}
-                    />
-
-                    {/* NFT Details */}
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-bold text-white/90">NBA #{nft.tokenId}</h3>
-                        <button
-                          onClick={() => openInExplorer(nft.tokenId)}
-                          className="p-1 hover:bg-white/10 rounded transition-colors"
-                        >
-                          <ExternalLink className="w-4 h-4 text-white/60" />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-white/60">Wallet Address:</span>
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono text-white/80">{nft.walletAddress}</span>
-                          <button
-                            onClick={() => copyAddress(nft.walletAddress)}
-                            className="p-1 hover:bg-white/10 rounded transition-colors"
-                          >
-                            {copiedAddress === nft.walletAddress ? (
-                              <Check className="w-3 h-3 text-green-500" />
-                            ) : (
-                              <Copy className="w-3 h-3 text-white/60" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        <div className="bg-white/5 rounded p-2">
-                          <div className="font-mono text-white/90">{nft.ethBalance} ETH</div>
-                          <div className="text-white/60">Balance</div>
-                        </div>
-                        <div className="bg-white/5 rounded p-2">
-                          <div className="font-mono text-white/90">{nft.transactionCount}</div>
-                          <div className="text-white/60">Txns</div>
-                        </div>
-                        <div className="bg-white/5 rounded p-2">
-                          <div className="font-mono text-white/90">{nft.nftCount}</div>
-                          <div className="text-white/60">NFTs</div>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => (window.location.href = `/account/${nft.tokenId}`)}
-                          className="flex-1 text-sm"
-                        >
-                          Manage
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => alert(`Trade NBA #${nft.tokenId} on OpenSea`)}
-                          className="flex-1 text-sm"
-                        >
-                          Trade
-                        </Button>
-                      </div>
-                    </div>
-                  </motion.div>
+                {nftAccounts.map((account, index) => (
+                  <NFTAccountCard
+                    key={account.tokenId.toString()}
+                    account={account}
+                    index={index}
+                    onCopyAddress={copyAddress}
+                    copiedAddress={copiedAddress}
+                    onOpenExplorer={openInExplorer}
+                    onManage={() => router.push(`/account/${account.tokenId.toString()}`)}
+                    generateSVG={generateContractSVG}
+                  />
                 ))}
               </div>
             ) : (
@@ -236,12 +164,100 @@ export default function WalletPage() {
                 </div>
                 <h3 className="text-xl font-semibold text-white/90 mb-2">No NFT Wallets Found</h3>
                 <p className="text-white/60 mb-6">You don't own any NFT-Bound Smart Accounts yet.</p>
-                <Button onClick={() => (window.location.href = "/mint")}>Mint Your First NBA</Button>
+                <Button onClick={() => router.push("/mint")}>Mint Your First NBA</Button>
               </div>
             )}
           </motion.div>
         )}
       </div>
     </div>
+  )
+}
+
+// NFT Account Card Component
+function NFTAccountCard({
+  account,
+  index,
+  onCopyAddress,
+  copiedAddress,
+  onOpenExplorer,
+  onManage,
+  generateSVG,
+}: {
+  account: NFTBoundAccount
+  index: number
+  onCopyAddress: (address: string) => void
+  copiedAddress: string
+  onOpenExplorer: (tokenId: string) => void
+  onManage: () => void
+  generateSVG: (account: NFTBoundAccount) => Promise<string>
+}) {
+  const [svg, setSvg] = useState<string>("")
+  const [metadata, setMetadata] = useState<any>(null)
+
+  useEffect(() => {
+    generateSVG(account).then(setSvg)
+  }, [account, generateSVG])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1 }}
+      className="glass-panel p-6 rounded-2xl hover:border-[var(--gradient-start)]/50 transition-colors"
+    >
+      {/* SVG Display */}
+      {svg && (
+        <div
+          className="w-full h-48 mb-4 rounded-lg overflow-hidden"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      )}
+
+      {/* NFT Details */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h3 className="font-bold text-white/90">NBA #{account.tokenId.toString()}</h3>
+          <button
+            onClick={() => onOpenExplorer(account.tokenId.toString())}
+            className="p-1 hover:bg-white/10 rounded transition-colors"
+          >
+            <ExternalLink className="w-4 h-4 text-white/60" />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-white/60">Wallet Address:</span>
+          <div className="flex items-center gap-1">
+            <span className="font-mono text-white/80">
+              {account.walletAddress.slice(0, 6)}...{account.walletAddress.slice(-4)}
+            </span>
+            <button
+              onClick={() => onCopyAddress(account.walletAddress)}
+              className="p-1 hover:bg-white/10 rounded transition-colors"
+            >
+              {copiedAddress === account.walletAddress ? (
+                <Check className="w-3 h-3 text-green-500" />
+              ) : (
+                <Copy className="w-3 h-3 text-white/60" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={onManage} className="flex-1 text-sm">
+            Manage
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => window.open(`https://opensea.io/assets/story-aeneid/${process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS}/${account.tokenId.toString()}`, "_blank")}
+            className="flex-1 text-sm"
+          >
+            Trade
+          </Button>
+        </div>
+      </div>
+    </motion.div>
   )
 }
