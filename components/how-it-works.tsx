@@ -33,7 +33,7 @@ const cardVariants = {
     y: 0,
     opacity: 1,
     transition: {
-      type: "spring",
+      type: "spring" as const,
       bounce: 0.4,
       duration: 0.8,
     },

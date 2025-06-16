@@ -2,12 +2,12 @@
 
 import React from "react"
 
-import { motion } from "framer-motion"
+import { motion, type HTMLMotionProps } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 type ButtonVariant = "primary" | "secondary"
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<HTMLMotionProps<"button">, "children"> {
   children: React.ReactNode
   variant?: ButtonVariant
 }

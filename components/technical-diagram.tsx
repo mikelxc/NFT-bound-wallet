@@ -15,13 +15,13 @@ const componentVariants = {
     opacity: isActive ? 1 : 0.4,
     scale: isActive ? 1.05 : 0.95,
     filter: isActive ? "drop-shadow(0 0 8px rgba(255,255,255,0.7))" : "none",
-    transition: { type: "spring", stiffness: 200, damping: 15 },
+    transition: { type: "spring" as const, stiffness: 200, damping: 15 },
   }),
   active: {
     opacity: 1,
     scale: 1.05,
     filter: "drop-shadow(0 0 8px rgba(255,255,255,0.7))",
-    transition: { type: "spring", stiffness: 200, damping: 15 },
+    transition: { type: "spring" as const, stiffness: 200, damping: 15 },
   },
 }
 
@@ -30,7 +30,7 @@ const lineVariants = {
   visible: (delay = 0) => ({
     pathLength: 1,
     opacity: 1,
-    transition: { pathLength: { duration: 0.8, ease: "easeInOut", delay }, opacity: { duration: 0.1, delay } },
+    transition: { pathLength: { duration: 0.8, ease: "easeInOut" as const, delay }, opacity: { duration: 0.1, delay } },
   }),
 }
 
@@ -39,7 +39,7 @@ const textIndicatorVariants = {
   visible: (delay = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 20, delay },
+    transition: { type: "spring" as const, stiffness: 300, damping: 20, delay },
   }),
 }
 
