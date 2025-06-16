@@ -46,13 +46,14 @@ export class NBAClient {
     // Simulate transaction first
     const { request } = await factory.simulate.mintWallet([to], {
       value: mintingFee,
-      account: walletClient.account!,
+      account: walletClient.account! as any,
     });
 
     // Execute transaction
     const hash = await factory.write.mintWallet([to], {
       ...request,
       value: mintingFee,
+      account: walletClient.account! as any,
     });
 
     // Wait for transaction receipt

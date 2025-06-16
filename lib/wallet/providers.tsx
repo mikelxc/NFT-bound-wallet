@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
 import { type State, WagmiProvider } from 'wagmi';
 import { wagmiAdapter } from './config';
-import { AppKitProvider } from '@reown/appkit/react';
 
 // Setup query client
 function makeQueryClient() {
@@ -43,7 +42,6 @@ export function WalletProvider({ children, initialState }: WalletProviderProps) 
     <WagmiProvider config={wagmiAdapter.wagmiConfig} initialState={initialState}>
       <QueryClientProvider client={queryClient}>
         {children}
-        <AppKitProvider />
       </QueryClientProvider>
     </WagmiProvider>
   );

@@ -8,7 +8,7 @@ import { storyAeneid } from 'viem/chains';
 export const localChain = storyAeneid;
 
 // Define supported chains
-export const chains = [localChain] as const;
+export const chains = [localChain];
 
 // Project ID from Reown
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || '';
