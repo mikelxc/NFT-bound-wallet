@@ -9,6 +9,7 @@ import { useConnectWallet, useWallet, useNBAClient } from "@/lib/wallet/hooks"
 import { useNBAStore } from "@/stores/nba-store"
 import { type NFTBoundAccount } from "@/lib/nba-sdk"
 import { useRouter } from "next/navigation"
+import { getExplorerTokenUrl } from "@/lib/utils"
 
 export default function WalletPage() {
   const router = useRouter()
@@ -17,7 +18,7 @@ export default function WalletPage() {
 
   // Wallet hooks
   const { connect, isConnected } = useConnectWallet()
-  const { address } = useWallet()
+  const { address, chain } = useWallet()
   const nbaClient = useNBAClient()
 
   // Store hooks
@@ -50,7 +51,18 @@ export default function WalletPage() {
   }
 
   const openInExplorer = (tokenId: string) => {
-    window.open(`https://explorer.story-aeneid.io/token/${process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS}/${tokenId}`, "_blank")
+    const factoryAddress = process.env.NEXT_PUBLIC_NBA_FACTORY_ADDRESS
+    if (!factoryAddress) {
+      console.error("NBA Factory address not configured")
+      return
+    }
+    
+    const explorerUrl = getExplorerTokenUrl(chain, factoryAddress, tokenId)
+    if (explorerUrl) {
+      window.open(explorerUrl, "_blank")
+    } else {
+      console.error("No explorer URL available for current chain")
+    }
   }
 
   const generateContractSVG = async (account: NFTBoundAccount) => {

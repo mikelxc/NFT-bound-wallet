@@ -32,7 +32,8 @@ export class NBAClient {
    */
   async mintAccount(
     to: Address,
-    walletClient: WalletClient
+    walletClient: WalletClient,
+    onStatusUpdate?: (status: string, hash?: string) => void
   ): Promise<MintResult> {
     const factory = getContract({
       address: this.config.factoryAddress,
@@ -40,15 +41,18 @@ export class NBAClient {
       client: { public: this.publicClient, wallet: walletClient }
     });
 
+    onStatusUpdate?.("Getting minting fee...");
     // Get minting fee
     const mintingFee = await factory.read.mintingFee();
 
+    onStatusUpdate?.("Simulating transaction...");
     // Simulate transaction first
     const { request } = await factory.simulate.mintWallet([to], {
       value: mintingFee,
       account: walletClient.account! as any,
     });
 
+    onStatusUpdate?.("Submitting transaction...");
     // Execute transaction
     const hash = await factory.write.mintWallet([to], {
       ...request,
@@ -56,8 +60,17 @@ export class NBAClient {
       account: walletClient.account! as any,
     });
 
-    // Wait for transaction receipt
-    const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    onStatusUpdate?.("Transaction submitted! Waiting for confirmation...", hash);
+    
+    // Wait for transaction receipt with timeout (5 minutes)
+    const receipt = await Promise.race([
+      this.publicClient.waitForTransactionReceipt({ hash }),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Transaction timeout after 5 minutes')), 5 * 60 * 1000)
+      )
+    ]);
+
+    onStatusUpdate?.("Transaction confirmed! Processing results...");
 
     // Parse events to get tokenId and wallet address
     const logs = parseEventLogs({

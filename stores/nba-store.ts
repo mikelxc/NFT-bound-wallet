@@ -12,6 +12,8 @@ interface NBAState {
   // Minting state
   isMinting: boolean;
   mintResult: MintResult | null;
+  mintingStatus: string;
+  transactionHash: string | null;
   
   // Actions
   setAccounts: (accounts: NFTBoundAccount[]) => void;
@@ -22,6 +24,8 @@ interface NBAState {
   // Minting actions
   setMinting: (minting: boolean) => void;
   setMintResult: (result: MintResult | null) => void;
+  setMintingStatus: (status: string) => void;
+  setTransactionHash: (hash: string | null) => void;
   
   // Utility actions
   reset: () => void;
@@ -35,6 +39,8 @@ export const useNBAStore = create<NBAState>((set) => ({
   error: null,
   isMinting: false,
   mintResult: null,
+  mintingStatus: '',
+  transactionHash: null,
   
   // Actions
   setAccounts: (accounts) => set({ nftAccounts: accounts, error: null }),
@@ -45,6 +51,8 @@ export const useNBAStore = create<NBAState>((set) => ({
   // Minting actions
   setMinting: (minting) => set({ isMinting: minting }),
   setMintResult: (result) => set({ mintResult: result, isMinting: false }),
+  setMintingStatus: (status) => set({ mintingStatus: status }),
+  setTransactionHash: (hash) => set({ transactionHash: hash }),
   
   // Utility actions
   reset: () => set({
@@ -54,5 +62,7 @@ export const useNBAStore = create<NBAState>((set) => ({
     error: null,
     isMinting: false,
     mintResult: null,
+    mintingStatus: '',
+    transactionHash: null,
   }),
 }));

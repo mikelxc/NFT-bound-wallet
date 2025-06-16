@@ -10,6 +10,7 @@ import { useConnectWallet, useWallet, useNBAClient } from "@/lib/wallet/hooks"
 import { useNBAStore } from "@/stores/nba-store"
 import { formatEther } from "viem"
 import { useRouter } from "next/navigation"
+import { getExplorerTxUrl } from "@/lib/utils"
 
 const steps = [
   { id: 1, name: "Introduction" },
@@ -39,11 +40,21 @@ export default function MintPage() {
 
   // Wallet hooks
   const { connect, isConnected } = useConnectWallet()
-  const { address, walletClient } = useWallet()
+  const { address, walletClient, chain } = useWallet()
   const nbaClient = useNBAClient()
   
   // Store hooks
-  const { isMinting, mintResult, setMinting, setMintResult, setError: setStoreError } = useNBAStore()
+  const { 
+    isMinting, 
+    mintResult, 
+    mintingStatus, 
+    transactionHash, 
+    setMinting, 
+    setMintResult, 
+    setMintingStatus, 
+    setTransactionHash, 
+    setError: setStoreError 
+  } = useNBAStore()
 
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, steps.length))
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1))
@@ -81,18 +92,38 @@ export default function MintPage() {
 
     setMinting(true)
     setError("")
+    setMintingStatus("Initializing transaction...")
+    setTransactionHash(null)
+    nextStep() // Move to minting animation step
 
     try {
-      // Mint NFT-bound account
-      const result = await nbaClient.mintAccount(address, walletClient)
+      setMintingStatus("Submitting transaction...")
+      
+      // Mint NFT-bound account with status updates
+      const result = await nbaClient.mintAccount(
+        address, 
+        walletClient,
+        (status: string, hash?: string) => {
+          setMintingStatus(status)
+          if (hash) {
+            setTransactionHash(hash)
+          }
+        }
+      )
       
       console.log("Minting successful:", result)
       setMintResult(result)
+      setMinting(false) // Reset minting state after success
+      setMintingStatus("Minting completed successfully!")
       nextStep() // Move to success step
     } catch (err: any) {
       console.error("Minting failed:", err)
       setError(err.message || "Failed to mint NFT-bound account")
       setMinting(false)
+      setMintingStatus("")
+      setTransactionHash(null)
+      // Go back to preview step on error
+      setCurrentStep(2)
     }
   }
 
@@ -203,9 +234,30 @@ export default function MintPage() {
           >
             <h1 className="text-3xl md:text-4xl font-bold mb-6 text-white/90">Minting Your NFT Smart Account...</h1>
             <Loader className="w-16 h-16 text-[var(--gradient-start)] animate-spin mb-4" />
-            <p className="text-white/70">
-              Please wait while we deploy your smart account and mint your NFT. This may take a few moments.
-            </p>
+            
+            {/* Status Updates */}
+            <div className="space-y-3 w-full max-w-md">
+              <p className="text-white/70">
+                {mintingStatus || "Please wait while we deploy your smart account and mint your NFT."}
+              </p>
+              
+              {transactionHash && (
+                <div className="glass-panel p-4 rounded-lg space-y-2">
+                  <p className="text-sm text-white/60">Transaction Hash:</p>
+                  <p className="font-mono text-xs text-white/80 break-all">{transactionHash}</p>
+                  {getExplorerTxUrl(chain, transactionHash) && (
+                    <a 
+                      href={getExplorerTxUrl(chain, transactionHash)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--gradient-start)] hover:underline text-sm"
+                    >
+                      View on Explorer
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
           </motion.div>
         )
       case 4: // Success
@@ -235,16 +287,18 @@ export default function MintPage() {
               <p>
                 Wallet Address: <span className="font-mono text-white/90">{mintResult?.walletAddress || deterministicAddress}</span>
               </p>
-              <p>
-                <a 
-                  href={`https://explorer.story-aeneid.io/tx/${mintResult?.transactionHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[var(--gradient-start)] hover:underline"
-                >
-                  View on Explorer
-                </a>
-              </p>
+              {mintResult?.transactionHash && getExplorerTxUrl(chain, mintResult.transactionHash) && (
+                <p>
+                  <a 
+                    href={getExplorerTxUrl(chain, mintResult.transactionHash)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--gradient-start)] hover:underline"
+                  >
+                    View on Explorer
+                  </a>
+                </p>
+              )}
             </div>
             <Button
               onClick={() => {
