@@ -6,7 +6,28 @@ import Button from "@/components/button"
 import { Search, Grid, List, ExternalLink, Copy, Check, Wallet } from "lucide-react"
 import Link from "next/link"
 
-// Mock data for all minted NFTs (public gallery)
+// Replace the existing generateNFTSVG function with contract-compatible version
+import { generateNFTSVG, type WalletData } from "@/components/svg-generator"
+
+// Update the function call in the component
+const generateContractSVG = (nft: any) => {
+  const walletData: WalletData = {
+    tokenId: nft.tokenId,
+    walletAddress: nft.walletAddress,
+    balance: nft.ethBalance,
+    transactionCount: nft.transactionCount,
+    nftCount: nft.nftCount,
+    isActive: true,
+  }
+
+  return generateNFTSVG(walletData, {
+    width: 300,
+    height: 200,
+    animations: true,
+  })
+}
+
+// Update the NFT rendering to use dynamic SVG
 const allMintedNFTs = [
   {
     tokenId: "0001",
@@ -17,18 +38,6 @@ const allMintedNFTs = [
     nftCount: 5,
     mintDate: "2024-06-15",
     lastActivity: "2024-06-15",
-    svgData: `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#667EEA;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#764BA2;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="300" height="200" fill="url(#grad1)" rx="16"/>
-      <text x="16" y="32" fill="white" fontFamily="monospace" fontSize="12">NBA #0001</text>
-      <text x="16" y="160" fill="white" fontFamily="monospace" fontSize="14">2.45 ETH</text>
-      <text x="16" y="180" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="10">142 txns • 5 NFTs</text>
-    </svg>`,
   },
   {
     tokenId: "0002",
@@ -39,18 +48,6 @@ const allMintedNFTs = [
     nftCount: 3,
     mintDate: "2024-06-14",
     lastActivity: "2024-06-14",
-    svgData: `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#764BA2;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#EA6B66;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="300" height="200" fill="url(#grad2)" rx="16"/>
-      <text x="16" y="32" fill="white" fontFamily="monospace" fontSize="12">NBA #0002</text>
-      <text x="16" y="160" fill="white" fontFamily="monospace" fontSize="14">1.23 ETH</text>
-      <text x="16" y="180" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="10">89 txns • 3 NFTs</text>
-    </svg>`,
   },
   {
     tokenId: "0003",
@@ -61,18 +58,6 @@ const allMintedNFTs = [
     nftCount: 12,
     mintDate: "2024-06-13",
     lastActivity: "2024-06-13",
-    svgData: `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#EA6B66;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#667EEA;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="300" height="200" fill="url(#grad3)" rx="16"/>
-      <text x="16" y="32" fill="white" fontFamily="monospace" fontSize="12">NBA #0003</text>
-      <text x="16" y="160" fill="white" fontFamily="monospace" fontSize="14">0.87 ETH</text>
-      <text x="16" y="180" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="10">234 txns • 12 NFTs</text>
-    </svg>`,
   },
   {
     tokenId: "0004",
@@ -83,18 +68,6 @@ const allMintedNFTs = [
     nftCount: 8,
     mintDate: "2024-06-12",
     lastActivity: "2024-06-12",
-    svgData: `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#667EEA;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#EA6B66;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="300" height="200" fill="url(#grad4)" rx="16"/>
-      <text x="16" y="32" fill="white" fontFamily="monospace" fontSize="12">NBA #0004</text>
-      <text x="16" y="160" fill="white" fontFamily="monospace" fontSize="14">5.12 ETH</text>
-      <text x="16" y="180" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="10">67 txns • 8 NFTs</text>
-    </svg>`,
   },
   {
     tokenId: "0005",
@@ -105,18 +78,6 @@ const allMintedNFTs = [
     nftCount: 2,
     mintDate: "2024-06-11",
     lastActivity: "2024-06-11",
-    svgData: `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#764BA2;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#667EEA;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="300" height="200" fill="url(#grad5)" rx="16"/>
-      <text x="16" y="32" fill="white" fontFamily="monospace" fontSize="12">NBA #0005</text>
-      <text x="16" y="160" fill="white" fontFamily="monospace" fontSize="14">0.34 ETH</text>
-      <text x="16" y="180" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="10">156 txns • 2 NFTs</text>
-    </svg>`,
   },
   {
     tokenId: "0006",
@@ -127,18 +88,6 @@ const allMintedNFTs = [
     nftCount: 15,
     mintDate: "2024-06-10",
     lastActivity: "2024-06-10",
-    svgData: `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad6" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#EA6B66;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#764BA2;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="300" height="200" fill="url(#grad6)" rx="16"/>
-      <text x="16" y="32" fill="white" fontFamily="monospace" fontSize="12">NBA #0006</text>
-      <text x="16" y="160" fill="white" fontFamily="monospace" fontSize="14">3.78 ETH</text>
-      <text x="16" y="180" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="10">298 txns • 15 NFTs</text>
-    </svg>`,
   },
 ]
 
@@ -285,7 +234,7 @@ export default function AccountGalleryPage() {
                 {/* SVG Display */}
                 <div
                   className="w-full h-40 mb-4 rounded-lg overflow-hidden"
-                  dangerouslySetInnerHTML={{ __html: nft.svgData }}
+                  dangerouslySetInnerHTML={{ __html: generateContractSVG(nft) }}
                 />
 
                 {/* NFT Details */}
@@ -356,7 +305,7 @@ export default function AccountGalleryPage() {
                 <div className="flex items-center gap-4">
                   <div
                     className="w-16 h-12 rounded overflow-hidden flex-shrink-0"
-                    dangerouslySetInnerHTML={{ __html: nft.svgData }}
+                    dangerouslySetInnerHTML={{ __html: generateContractSVG(nft) }}
                   />
                   <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
                     <div>

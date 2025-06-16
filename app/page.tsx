@@ -17,12 +17,21 @@ export default function LandingPage() {
               Your Smart Account IS an NFT
             </h1>
             <p className="max-w-[700px] text-white/70 md:text-xl">
-              Trade wallets like never before. Each NFT controls a complete smart account — transfer the NFT, transfer
-              everything inside.
+              Trade wallets like never before. Each NFT controls a complete smart account built on Kernel v3.3 —
+              transfer the NFT, transfer everything inside.
             </p>
           </div>
 
-          <NbaCard />
+          {/* Use contract-compatible SVG for hero */}
+          <NbaCard
+            tokenId="0001"
+            walletAddress="0x1234...5678"
+            ethBalance="2.45"
+            transactionCount={142}
+            nftCount={5}
+            isActive={true}
+            useContractSVG={true}
+          />
 
           <div className="flex flex-col sm:flex-row gap-4">
             <Link href="/mint">
@@ -50,7 +59,7 @@ export default function LandingPage() {
 
       {/* Footer Placeholder - Not explicitly in requirements but good practice */}
       <footer className="py-12 text-center text-white/50">
-        <p>&copy; {new Date().getFullYear()} NFT-Bound Smart Accounts. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} NFT-Bound Smart Accounts. Built on Kernel v3.3.</p>
         {/* TODO: Add social links or other footer content if needed */}
       </footer>
     </>

@@ -9,7 +9,7 @@ export default function Header() {
   const isActive = (path: string) => pathname === path || pathname.startsWith(path)
 
   return (
-    <header className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-2xl">
+    <header className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-3xl">
       <nav className="w-full p-2 rounded-full glass-panel">
         <div className="flex items-center justify-between">
           <Link href="/" className="font-bold text-lg text-white/90 pl-4">
@@ -30,6 +30,12 @@ export default function Header() {
               className={`nav-link ${isActive("/account") && pathname === "/account" ? "nav-link-active text-white/90" : ""}`}
             >
               Gallery
+            </Link>
+            <Link
+              href="/contract-preview"
+              className={`nav-link ${isActive("/contract-preview") ? "nav-link-active text-white/90" : ""}`}
+            >
+              Preview
             </Link>
             <Link href="/docs" className={`nav-link ${isActive("/docs") ? "nav-link-active text-white/90" : ""}`}>
               Docs

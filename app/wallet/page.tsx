@@ -4,6 +4,7 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import Button from "@/components/button"
 import { Wallet, ExternalLink, Copy, Check } from "lucide-react"
+import { generateNFTSVG, type WalletData } from "@/components/svg-generator"
 
 // Mock data for NFT gallery
 const mockNFTs = [
@@ -13,18 +14,6 @@ const mockNFTs = [
     ethBalance: "2.45",
     transactionCount: 142,
     nftCount: 5,
-    svgData: `<svg width="350" height="220" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#667EEA;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#764BA2;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="350" height="220" fill="url(#grad1)" rx="20"/>
-      <text x="20" y="40" fill="white" fontFamily="monospace" fontSize="14">NBA #0001</text>
-      <text x="20" y="180" fill="white" fontFamily="monospace" fontSize="16">2.45 ETH</text>
-      <text x="20" y="200" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="12">142 txns • 5 NFTs</text>
-    </svg>`,
   },
   {
     tokenId: "0002",
@@ -32,18 +21,6 @@ const mockNFTs = [
     ethBalance: "1.23",
     transactionCount: 89,
     nftCount: 3,
-    svgData: `<svg width="350" height="220" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#764BA2;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#EA6B66;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="350" height="220" fill="url(#grad2)" rx="20"/>
-      <text x="20" y="40" fill="white" fontFamily="monospace" fontSize="14">NBA #0002</text>
-      <text x="20" y="180" fill="white" fontFamily="monospace" fontSize="16">1.23 ETH</text>
-      <text x="20" y="200" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="12">89 txns • 3 NFTs</text>
-    </svg>`,
   },
   {
     tokenId: "0003",
@@ -51,20 +28,25 @@ const mockNFTs = [
     ethBalance: "0.87",
     transactionCount: 234,
     nftCount: 12,
-    svgData: `<svg width="350" height="220" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#EA6B66;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#667EEA;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="350" height="220" fill="url(#grad3)" rx="20"/>
-      <text x="20" y="40" fill="white" fontFamily="monospace" fontSize="14">NBA #0003</text>
-      <text x="20" y="180" fill="white" fontFamily="monospace" fontSize="16">0.87 ETH</text>
-      <text x="20" y="200" fill="rgba(255,255,255,0.7)" fontFamily="monospace" fontSize="12">234 txns • 12 NFTs</text>
-    </svg>`,
   },
 ]
+
+const generateContractSVG = (nft: any) => {
+  const walletData: WalletData = {
+    tokenId: nft.tokenId,
+    walletAddress: nft.walletAddress,
+    balance: nft.ethBalance,
+    transactionCount: nft.transactionCount,
+    nftCount: nft.nftCount,
+    isActive: true,
+  }
+
+  return generateNFTSVG(walletData, {
+    width: 350,
+    height: 220,
+    animations: true,
+  })
+}
 
 export default function WalletPage() {
   const [isConnected, setIsConnected] = useState(false)
@@ -181,7 +163,7 @@ export default function WalletPage() {
                     {/* SVG Display */}
                     <div
                       className="w-full h-48 mb-4 rounded-lg overflow-hidden"
-                      dangerouslySetInnerHTML={{ __html: nft.svgData }}
+                      dangerouslySetInnerHTML={{ __html: generateContractSVG(nft) }}
                     />
 
                     {/* NFT Details */}

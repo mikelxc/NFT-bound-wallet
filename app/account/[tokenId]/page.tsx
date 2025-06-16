@@ -255,7 +255,15 @@ export default function AccountPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: NBA Card and Actions */}
         <div className="lg:col-span-1 space-y-6">
-          <NbaCard /> {/* TODO: Pass actual accountData to NbaCard to make it dynamic */}
+          <NbaCard
+            tokenId={accountData.tokenId}
+            walletAddress={accountData.walletAddress}
+            ethBalance={accountData.ethBalance}
+            transactionCount={accountData.transactionCount}
+            nftCount={accountData.nftCount}
+            isActive={true}
+            variant="detailed"
+          />
           <div className="grid grid-cols-2 gap-4">
             <Button onClick={() => alert("Send Action")}>
               <Send className="mr-2 h-4 w-4" /> Send
