@@ -237,7 +237,7 @@ export default function MintPage() {
                 </div>
                 <div className="glass-panel p-6 rounded-xl space-y-3 text-sm text-white/80 mb-8">
                   <p>Minting Fee: {formatEther(mintingFee)} ETH</p>
-                  <p>Network: Story Aeneid (Chain ID: 1514)</p>
+                  <p>Network: Story Aeneid (Chain ID: 1315)</p>
                   {deterministicAddress && (
                     <p>
                       Your Wallet Address: <span className="font-mono">{deterministicAddress}</span>
