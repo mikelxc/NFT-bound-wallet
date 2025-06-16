@@ -1,30 +1,115 @@
-# Website starting point
+# NFT-Bound Wallet
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+A monorepo containing both the smart contracts and frontend for the NFT-Bound Wallet project built on Kernel v3.3.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/tapants-marketing-projects/v0-website-starting-point)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/lUSXS3ZiXAU)
+## Project Structure
 
-## Overview
+```
+├── app/                    # Next.js frontend application
+├── components/             # React components
+├── contracts/              # Smart contracts (Foundry project)
+├── lib/                    # Shared utilities and configurations
+│   ├── contracts.ts        # Contract addresses and network config
+│   ├── generated.ts        # Auto-generated ABIs and types (via wagmi)
+│   └── utils.ts           # Utility functions
+└── public/                 # Static assets
+```
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## Smart Contracts
 
-## Deployment
+The project uses Kernel v3.3 for account abstraction with NFT-bound validation:
 
-Your project is live at:
+- **NFTWalletFactory**: Main factory contract for minting wallet NFTs
+- **NFTBoundValidator**: Validator that ties wallet control to NFT ownership
+- **Kernel**: Account abstraction implementation
+- **KernelFactory**: Factory for creating Kernel accounts
 
-**[https://vercel.com/tapants-marketing-projects/v0-website-starting-point](https://vercel.com/tapants-marketing-projects/v0-website-starting-point)**
+### Deployed Contracts (Story Testnet - Chain ID: 1315)
 
-## Build your app
+- **NFTWalletFactory**: [`0x3A1888490fF7A5c0a6c568066A9E636985AEa44c`](https://aeneid.storyscan.io/address/0x3a1888490ff7a5c0a6c568066a9e636985aea44c)
+- **NFTBoundValidator**: [`0xAD021b41871D7aC878E7c3C8589B7e8E36C2Ee22`](https://aeneid.storyscan.io/address/0xad021b41871d7ac878e7c3c8589b7e8e36c2ee22)
+- **Kernel**: [`0xAdb7713Ee63Acf1233A67f213CbAc9Ac6A5a8e09`](https://aeneid.storyscan.io/address/0xadb7713ee63acf1233a67f213cbac9ac6a5a8e09)
+- **KernelFactory**: [`0xD53A6E3EAbECaDfF73559aa1b7678738a84313ed`](https://aeneid.storyscan.io/address/0xd53a6e3eabecadff73559aa1b7678738a84313ed)
 
-Continue building your app on:
+## Development
 
-**[https://v0.dev/chat/projects/lUSXS3ZiXAU](https://v0.dev/chat/projects/lUSXS3ZiXAU)**
+### Prerequisites
 
-## How It Works
+- Node.js 18+ 
+- npm or pnpm
+- Foundry (for smart contract development)
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+### Installation
+
+```bash
+# Install dependencies
+npm install
+
+# Install contract dependencies
+npm run contracts:build
+```
+
+### Scripts
+
+#### Frontend
+```bash
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run linting
+```
+
+#### Smart Contracts
+```bash
+npm run contracts:build    # Compile contracts
+npm run contracts:test     # Run contract tests
+npm run contracts:deploy   # Deploy contracts
+```
+
+#### Code Generation
+```bash
+npm run wagmi:generate     # Generate ABIs and types from contracts
+```
+
+### Environment Setup
+
+Create a `.env.local` file in the root directory:
+
+```env
+# Optional: Add environment variables for the frontend
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_project_id
+```
+
+For contract deployment, see `contracts/.env.example`.
+
+## Features
+
+### NFT-Bound Smart Accounts
+- Each wallet is represented as an NFT
+- Transfer the NFT = transfer wallet control
+- Built on Kernel v3.3 account abstraction
+- Dynamic SVG artwork based on wallet activity
+
+### On-Chain SVG Generation
+- 400x400px square format (OpenSea optimized)
+- Glassmorphism effects with animated gradients
+- Balance-based visual elements and rarity filters
+- Activity-driven dynamic components
+
+### Frontend
+- Next.js 15 with React 19
+- Tailwind CSS for styling
+- Radix UI components
+- TypeScript throughout
+- Auto-generated contract types via wagmi
+
+## Contributing
+
+1. Make changes to contracts in `contracts/` directory
+2. Run `npm run contracts:build` to compile
+3. Run `npm run wagmi:generate` to update types
+4. Test frontend integration
+
+## License
+
+MIT License - see LICENSE file for details.

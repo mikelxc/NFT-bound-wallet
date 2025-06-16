@@ -1,12 +1,19 @@
 {
-  "name": "my-v0-project",
+  "name": "nft-bound-wallet",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "contracts"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "contracts:build": "cd contracts && forge build",
+    "contracts:test": "cd contracts && forge test",
+    "contracts:deploy": "cd contracts && forge script script/DeployNFTWallet.s.sol --broadcast",
+    "wagmi:generate": "wagmi generate"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -65,6 +72,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@wagmi/cli": "^2.3.1",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
