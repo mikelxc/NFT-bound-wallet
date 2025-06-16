@@ -1,39 +1,82 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.0;
 
-import {IValidator} from "kernel/src/interfaces/IERC7579Modules.sol";
-import {PackedUserOperation} from "kernel/src/interfaces/PackedUserOperation.sol";
 import {ECDSA} from "solady/utils/ECDSA.sol";
 import {ERC721} from "solady/tokens/ERC721.sol";
+import {IValidator, IHook} from "kernel/src/interfaces/IERC7579Modules.sol";
+import {PackedUserOperation} from "kernel/src/interfaces/PackedUserOperation.sol";
 import {
     SIG_VALIDATION_SUCCESS_UINT,
     SIG_VALIDATION_FAILED_UINT,
     MODULE_TYPE_VALIDATOR,
+    MODULE_TYPE_HOOK,
     ERC1271_MAGICVALUE,
     ERC1271_INVALID
 } from "kernel/src/types/Constants.sol";
 
-contract NFTBoundValidator is IValidator {
-    address public nftFactory;
-    mapping(address => uint256) public walletToTokenId;
-    mapping(address => bool) public initialized;
+struct NFTBoundValidatorStorage {
+    address nftContract;
+    uint256 tokenId;
+}
 
-    error InvalidFactory();
-    error InvalidWallet();
+contract NFTBoundValidator is IValidator, IHook {
+    event NFTBound(address indexed kernel, address indexed nftContract, uint256 indexed tokenId);
+
+    mapping(address => NFTBoundValidatorStorage) public nftBoundValidatorStorage;
+
+    error InvalidNFTContract();
     error NotNFTOwner();
 
-    modifier onlyFactory() {
-        if (msg.sender != nftFactory) revert InvalidFactory();
-        _;
+    function onInstall(bytes calldata _data) external payable override {
+        if (_isInitialized(msg.sender)) revert AlreadyInitialized(msg.sender);
+        
+        (address nftContract, uint256 tokenId) = abi.decode(_data, (address, uint256));
+        nftBoundValidatorStorage[msg.sender].nftContract = nftContract;
+        nftBoundValidatorStorage[msg.sender].tokenId = tokenId;
+        emit NFTBound(msg.sender, nftContract, tokenId);
     }
 
-    function setFactory(address _factory) external {
-        require(nftFactory == address(0), "Factory already set");
-        nftFactory = _factory;
+    function onUninstall(bytes calldata) external payable override {
+        if (!_isInitialized(msg.sender)) revert NotInitialized(msg.sender);
+        delete nftBoundValidatorStorage[msg.sender];
     }
 
-    function setWalletTokenId(address wallet, uint256 tokenId) external onlyFactory {
-        walletToTokenId[wallet] = tokenId;
+    function isModuleType(uint256 typeID) external pure override returns (bool) {
+        return typeID == MODULE_TYPE_VALIDATOR || typeID == MODULE_TYPE_HOOK;
+    }
+
+    function isInitialized(address smartAccount) external view override returns (bool) {
+        return _isInitialized(smartAccount);
+    }
+
+    function _isInitialized(address smartAccount) internal view returns (bool) {
+        return nftBoundValidatorStorage[smartAccount].nftContract != address(0);
+    }
+
+    function _getNFTOwner(address smartAccount) internal view returns (address) {
+        NFTBoundValidatorStorage memory storage_ = nftBoundValidatorStorage[smartAccount];
+        return ERC721(storage_.nftContract).ownerOf(storage_.tokenId);
+    }
+
+    function _validateSignature(address owner, bytes32 hash, bytes calldata sig) internal view returns (bool) {
+        try this.recoverSigner(hash, sig) returns (address recovered) {
+            if (owner == recovered) {
+                return true;
+            }
+        } catch {
+            // Ignore invalid signature error
+        }
+        
+        bytes32 ethHash = ECDSA.toEthSignedMessageHash(hash);
+        try this.recoverSigner(ethHash, sig) returns (address recovered) {
+            return owner == recovered;
+        } catch {
+            return false;
+        }
+    }
+    
+    function recoverSigner(bytes32 hash, bytes calldata sig) external view returns (address) {
+        return ECDSA.recover(hash, sig);
     }
 
     function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash)
@@ -42,102 +85,31 @@ contract NFTBoundValidator is IValidator {
         override
         returns (uint256)
     {
-        uint256 tokenId = walletToTokenId[userOp.sender];
-        
-        // Check if this wallet is registered and get the NFT owner
-        address nftOwner;
-        try ERC721(nftFactory).ownerOf(tokenId) returns (address owner) {
-            nftOwner = owner;
-        } catch {
-            revert InvalidWallet();
-        }
-        
-        if (nftOwner == address(0)) revert NotNFTOwner();
-
-        bytes32 ethSignedHash = ECDSA.toEthSignedMessageHash(userOpHash);
-        
-        // Extract the actual signature from the padded format
-        // Skip the first 97 bytes of padding, then decode the signature
-        bytes memory actualSignature;
-        if (userOp.signature.length > 97) {
-            bytes memory encodedData = userOp.signature[97:];
-            (actualSignature,) = abi.decode(encodedData, (bytes, bytes));
-        } else {
-            actualSignature = userOp.signature;
-        }
-        
-        address recovered;
-        try this.recoverSigner(ethSignedHash, actualSignature) returns (address signer) {
-            recovered = signer;
-        } catch {
-            return SIG_VALIDATION_FAILED_UINT;
-        }
-        
-        if (recovered == nftOwner) {
-            return SIG_VALIDATION_SUCCESS_UINT;
-        } else {
-            return SIG_VALIDATION_FAILED_UINT;
-        }
+        address owner = _getNFTOwner(msg.sender);
+        bytes calldata sig = userOp.signature;
+        return _validateSignature(owner, userOpHash, sig) ? SIG_VALIDATION_SUCCESS_UINT : SIG_VALIDATION_FAILED_UINT;
     }
 
-    function isValidSignatureWithSender(address sender, bytes32 hash, bytes calldata signature)
+    function isValidSignatureWithSender(address, bytes32 hash, bytes calldata sig)
         external
         view
         override
         returns (bytes4)
     {
-        uint256 tokenId = walletToTokenId[sender];
-        
-        address nftOwner;
-        try ERC721(nftFactory).ownerOf(tokenId) returns (address owner) {
-            nftOwner = owner;
-        } catch {
-            return ERC1271_INVALID;
-        }
-        
-        if (nftOwner == address(0)) return ERC1271_INVALID;
-
-        bytes32 ethSignedHash = ECDSA.toEthSignedMessageHash(hash);
-        
-        address recovered;
-        try this.recoverSigner(ethSignedHash, signature) returns (address signer) {
-            recovered = signer;
-        } catch {
-            return ERC1271_INVALID;
-        }
-        
-        if (recovered == nftOwner) {
-            return ERC1271_MAGICVALUE;
-        } else {
-            return ERC1271_INVALID;
-        }
+        address owner = _getNFTOwner(msg.sender);
+        return _validateSignature(owner, hash, sig) ? ERC1271_MAGICVALUE : ERC1271_INVALID;
     }
 
-    function onInstall(bytes calldata data) external payable override {
-        if (initialized[msg.sender]) revert AlreadyInitialized(msg.sender);
-        
-        // Decode tokenId from installation data
-        uint256 tokenId = abi.decode(data, (uint256));
-        walletToTokenId[msg.sender] = tokenId;
-        initialized[msg.sender] = true;
+    function preCheck(address msgSender, uint256 value, bytes calldata)
+        external
+        payable
+        override
+        returns (bytes memory)
+    {
+        address owner = _getNFTOwner(msg.sender);
+        require(msgSender == owner, "NFTBoundValidator: sender is not NFT owner");
+        return hex"";
     }
 
-    function onUninstall(bytes calldata) external payable override {
-        if (!initialized[msg.sender]) revert NotInitialized(msg.sender);
-        
-        delete walletToTokenId[msg.sender];
-        delete initialized[msg.sender];
-    }
-
-    function isModuleType(uint256 moduleTypeId) external pure override returns (bool) {
-        return moduleTypeId == MODULE_TYPE_VALIDATOR;
-    }
-
-    function isInitialized(address smartAccount) external view override returns (bool) {
-        return initialized[smartAccount];
-    }
-
-    function recoverSigner(bytes32 hash, bytes calldata signature) external view returns (address) {
-        return ECDSA.recover(hash, signature);
-    }
+    function postCheck(bytes calldata hookData) external payable override {}
 }

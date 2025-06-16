@@ -40,7 +40,7 @@ contract NFTWalletFactoryTest is Test {
             "WNFT"
         );
         
-        validator.setFactory(address(factory));
+        // No need to set factory anymore - validator is self-contained
         
         vm.deal(user, 10 ether);
         vm.deal(anotherUser, 10 ether);

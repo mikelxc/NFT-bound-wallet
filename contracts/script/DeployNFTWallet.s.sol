@@ -23,9 +23,7 @@ contract DeployScript is Script {
             entryPoint = IEntryPoint(payable(entryPointAddress));
             console.log("Using existing EntryPoint at:", entryPointAddress);
         } else {
-            // For deployment, we'd need a real EntryPoint contract
-            // For now, use the canonical EntryPoint address
-            entryPoint = IEntryPoint(0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789);
+            entryPoint = IEntryPoint(0x0000000071727De22E5E9d8BAf0edAc6f37da032);
             console.log("Using canonical EntryPoint at:", address(entryPoint));
         }
         
@@ -42,8 +40,8 @@ contract DeployScript is Script {
         console.log("Deployed NFTBoundValidator at:", address(validator));
         
         // Deploy NFTWalletFactory
-        string memory name = vm.envOr("NFT_NAME", string("Wallet NFT"));
-        string memory symbol = vm.envOr("NFT_SYMBOL", string("WNFT"));
+        string memory name = vm.envOr("NFT_NAME", string("NFT Bound Account"));
+        string memory symbol = vm.envOr("NFT_SYMBOL", string("NBA"));
         
         NFTWalletFactory factory = new NFTWalletFactory(
             kernelFactory,
@@ -52,10 +50,6 @@ contract DeployScript is Script {
             symbol
         );
         console.log("Deployed NFTWalletFactory at:", address(factory));
-        
-        // Set factory on validator
-        validator.setFactory(address(factory));
-        console.log("Set factory on validator");
         
         vm.stopBroadcast();
         

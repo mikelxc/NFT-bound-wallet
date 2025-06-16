@@ -63,7 +63,7 @@ contract NFTWalletFactory is ERC721, Ownable, INFTWalletFactory {
             "initialize(bytes21,address,bytes,bytes,bytes[])",
             rootValidator,
             IHook(HOOK_MODULE_NOT_INSTALLED), // No hook needed
-            abi.encode(tokenId), // validator data (tokenId)
+            abi.encode(address(this), tokenId), // validator data (nftContract, tokenId)
             "", // hook data (empty)
             new bytes[](0) // initConfig (empty)
         );
@@ -89,7 +89,7 @@ contract NFTWalletFactory is ERC721, Ownable, INFTWalletFactory {
             "initialize(bytes21,address,bytes,bytes,bytes[])",
             rootValidator,
             IHook(HOOK_MODULE_NOT_INSTALLED),
-            abi.encode(tokenId),
+            abi.encode(address(this), tokenId),
             "",
             new bytes[](0)
         );
@@ -126,7 +126,7 @@ contract NFTWalletFactory is ERC721, Ownable, INFTWalletFactory {
                 '"name":"NBA #', tokenId.toString(), '",',
                 '"description":"This NFT represents ownership of an NFT-Bound Smart Account (NBA) built on Kernel v3.3. The owner of this NFT has full control over the associated wallet. Transfer this NFT to transfer wallet control instantly.",',
                 '"image":"data:image/svg+xml;base64,', Base64.encode(bytes(svg)), '",',
-                '"external_url":"https://github.com/your-repo/nft-wallet",',
+                '"external_url":"https://github.com/mikelxc/NFT-bound-wallet",',
                 '"background_color":"667eea",',
                 '"attributes":[',
                     '{"trait_type":"Wallet Address","value":"', wallet.toHexString(), '"},',
@@ -372,7 +372,7 @@ contract NFTWalletFactory is ERC721, Ownable, INFTWalletFactory {
                 '"name":"Wallet NFTs",',
                 '"description":"A collection of NFTs where each token represents ownership of a smart contract wallet built on Kernel v3.3. Transfer the NFT to transfer wallet control.",',
                 '"image":"data:image/svg+xml;base64,', Base64.encode(bytes(_getCollectionSvg())), '",',
-                '"external_link":"https://github.com/your-repo/nft-wallet",',
+                '"external_link":"https://github.com/mikelxc/NFT-bound-wallet",',
                 '"seller_fee_basis_points":0,',
                 '"fee_recipient":"0x0000000000000000000000000000000000000000"',
             '}'

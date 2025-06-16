@@ -10,7 +10,7 @@ import {EntryPoint} from "account-abstraction/core/EntryPoint.sol";
 import {IEntryPoint} from "kernel/src/interfaces/IEntryPoint.sol";
 import {PackedUserOperation} from "kernel/src/interfaces/PackedUserOperation.sol";
 import {ECDSA} from "solady/utils/ECDSA.sol";
-import {SIG_VALIDATION_SUCCESS_UINT, SIG_VALIDATION_FAILED_UINT, ERC1271_MAGICVALUE, ERC1271_INVALID, MODULE_TYPE_VALIDATOR} from "kernel/src/types/Constants.sol";
+import {SIG_VALIDATION_SUCCESS_UINT, SIG_VALIDATION_FAILED_UINT, ERC1271_MAGICVALUE, ERC1271_INVALID, MODULE_TYPE_VALIDATOR, MODULE_TYPE_HOOK} from "kernel/src/types/Constants.sol";
 
 contract NFTBoundValidatorTest is Test {
     NFTWalletFactory public factory;
@@ -42,35 +42,26 @@ contract NFTBoundValidatorTest is Test {
             "WNFT"
         );
         
-        validator.setFactory(address(factory));
+        // No need to set factory anymore - validator is self-contained
         
         vm.deal(user, 10 ether);
         vm.deal(anotherUser, 10 ether);
     }
 
-    function testValidatorOnlyFactoryCanSet() public {
-        address newFactory = makeAddr("newFactory");
+    function testOnInstallInitializesValidator() public {
+        address mockWallet = makeAddr("mockWallet");
         
-        // Only factory should be able to set wallet token ID
-        vm.prank(user);
-        vm.expectRevert(NFTBoundValidator.InvalidFactory.selector);
-        validator.setWalletTokenId(makeAddr("wallet"), 1);
+        // Test onInstall with valid data
+        vm.prank(mockWallet);
+        validator.onInstall(abi.encode(address(factory), uint256(1)));
         
-        // Factory should be able to set
-        vm.prank(address(factory));
-        validator.setWalletTokenId(makeAddr("wallet"), 0);
-    }
-
-    function testFactoryCanOnlyBeSetOnce() public {
-        // Create new validator
-        NFTBoundValidator newValidator = new NFTBoundValidator();
+        // Verify initialization
+        assertTrue(validator.isInitialized(mockWallet));
         
-        // First call should work
-        newValidator.setFactory(makeAddr("factory1"));
-        
-        // Second call should fail
-        vm.expectRevert("Factory already set");
-        newValidator.setFactory(makeAddr("factory2"));
+        // Check storage
+        (address nftContract, uint256 tokenId) = validator.nftBoundValidatorStorage(mockWallet);
+        assertEq(nftContract, address(factory));
+        assertEq(tokenId, 1);
     }
 
     function testValidatePluginDataWithValidSignature() public {
@@ -98,12 +89,10 @@ contract NFTBoundValidatorTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, ethSignedHash);
         bytes memory signature = abi.encodePacked(r, s, v);
         
-        // Encode signature in the expected format
-        userOp.signature = abi.encodePacked(
-            new bytes(97), // padding for plugin signature format
-            abi.encode(signature, "")
-        );
+        // Use signature directly (simplified validation)
+        userOp.signature = signature;
         
+        vm.prank(wallet);
         uint256 result = validator.validateUserOp(userOp, userOpHash);
         assertEq(result, SIG_VALIDATION_SUCCESS_UINT);
     }
@@ -125,7 +114,9 @@ contract NFTBoundValidatorTest is Test {
         
         bytes32 userOpHash = keccak256("test");
         
-        vm.expectRevert(NFTBoundValidator.InvalidWallet.selector);
+        // This should revert because the wallet is not initialized
+        vm.prank(fakeWallet);
+        vm.expectRevert();
         validator.validateUserOp(userOp, userOpHash);
     }
 
@@ -141,6 +132,7 @@ contract NFTBoundValidatorTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, ethSignedHash);
         bytes memory signature = abi.encodePacked(r, s, v);
         
+        vm.prank(wallet);
         bytes4 result = validator.isValidSignatureWithSender(wallet, hash, signature);
         assertEq(result, ERC1271_MAGICVALUE);
         
@@ -148,6 +140,7 @@ contract NFTBoundValidatorTest is Test {
         (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(anotherUserPrivateKey, ethSignedHash);
         bytes memory wrongSignature = abi.encodePacked(r2, s2, v2);
         
+        vm.prank(wallet);
         bytes4 wrongResult = validator.isValidSignatureWithSender(wallet, hash, wrongSignature);
         assertEq(wrongResult, ERC1271_INVALID);
     }
@@ -168,6 +161,7 @@ contract NFTBoundValidatorTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, ethSignedHash);
         bytes memory signature = abi.encodePacked(r, s, v);
         
+        vm.prank(wallet);
         bytes4 result = validator.isValidSignatureWithSender(wallet, hash, signature);
         assertEq(result, ERC1271_INVALID);
         
@@ -175,6 +169,7 @@ contract NFTBoundValidatorTest is Test {
         (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(anotherUserPrivateKey, ethSignedHash);
         bytes memory newSignature = abi.encodePacked(r2, s2, v2);
         
+        vm.prank(wallet);
         bytes4 newResult = validator.isValidSignatureWithSender(wallet, hash, newSignature);
         assertEq(newResult, ERC1271_MAGICVALUE);
     }
@@ -186,7 +181,9 @@ contract NFTBoundValidatorTest is Test {
         
         // Verify wallet is initialized
         assertTrue(validator.isInitialized(wallet));
-        assertEq(validator.walletToTokenId(wallet), tokenId);
+        (address nftContract, uint256 storedTokenId) = validator.nftBoundValidatorStorage(wallet);
+        assertEq(nftContract, address(factory));
+        assertEq(storedTokenId, tokenId);
         
         // Call onUninstall from the wallet
         vm.prank(wallet);
@@ -194,7 +191,9 @@ contract NFTBoundValidatorTest is Test {
         
         // Verify wallet data is cleared
         assertFalse(validator.isInitialized(wallet));
-        assertEq(validator.walletToTokenId(wallet), 0);
+        (address clearedContract, uint256 clearedTokenId) = validator.nftBoundValidatorStorage(wallet);
+        assertEq(clearedContract, address(0));
+        assertEq(clearedTokenId, 0);
     }
 
     function testOnUninstallFailsIfNotInitialized() public {
@@ -213,27 +212,27 @@ contract NFTBoundValidatorTest is Test {
         // Try to call onInstall again - should fail
         vm.prank(wallet);
         vm.expectRevert(abi.encodeWithSignature("AlreadyInitialized(address)", wallet));
-        validator.onInstall(abi.encode(1));
+        validator.onInstall(abi.encode(address(factory), uint256(1)));
     }
 
     function testIsModuleType() public {
-        // Should return true for validator module type
+        // Should return true for validator and hook module types
         assertTrue(validator.isModuleType(MODULE_TYPE_VALIDATOR));
+        assertTrue(validator.isModuleType(MODULE_TYPE_HOOK));
         
         // Should return false for other module types
         assertFalse(validator.isModuleType(0)); // Invalid type
         assertFalse(validator.isModuleType(2)); // Executor type
-        assertFalse(validator.isModuleType(3)); // Hook type
         assertFalse(validator.isModuleType(999)); // Random type
     }
 
-    function testValidateUserOpWithZeroNFTOwner() public {
-        // Create a mock UserOperation for a non-existent wallet
+    function testValidateUserOpWithNonExistentNFT() public {
+        // Create a mock wallet and initialize validator with non-existent token
         address fakeWallet = makeAddr("fakeWallet");
         
-        // Set wallet tokenId to point to a non-existent NFT
-        vm.prank(address(factory));
-        validator.setWalletTokenId(fakeWallet, 999); // Non-existent token ID
+        // Initialize validator with non-existent NFT
+        vm.prank(fakeWallet);
+        validator.onInstall(abi.encode(address(factory), uint256(999))); // Non-existent token ID
         
         PackedUserOperation memory userOp = PackedUserOperation({
             sender: fakeWallet,
@@ -249,7 +248,9 @@ contract NFTBoundValidatorTest is Test {
         
         bytes32 userOpHash = keccak256("test");
         
-        vm.expectRevert(NFTBoundValidator.InvalidWallet.selector);
+        // This should revert when trying to get owner of non-existent NFT
+        vm.prank(fakeWallet);
+        vm.expectRevert();
         validator.validateUserOp(userOp, userOpHash);
     }
 
@@ -281,6 +282,7 @@ contract NFTBoundValidatorTest is Test {
         // Use short signature directly (no padding)
         userOp.signature = signature;
         
+        vm.prank(wallet);
         uint256 result = validator.validateUserOp(userOp, userOpHash);
         assertEq(result, SIG_VALIDATION_SUCCESS_UINT);
     }
@@ -293,6 +295,7 @@ contract NFTBoundValidatorTest is Test {
         bytes32 hash = keccak256("test message");
         bytes memory invalidSignature = hex"1234567890"; // Invalid signature
         
+        vm.prank(wallet);
         bytes4 result = validator.isValidSignatureWithSender(wallet, hash, invalidSignature);
         assertEq(result, ERC1271_INVALID);
     }
@@ -300,24 +303,33 @@ contract NFTBoundValidatorTest is Test {
     function testIsValidSignatureWithNonExistentWallet() public {
         address fakeWallet = makeAddr("fakeWallet");
         
-        // Set wallet tokenId to point to a non-existent NFT
-        vm.prank(address(factory));
-        validator.setWalletTokenId(fakeWallet, 999); // Non-existent token ID
+        // Initialize wallet with non-existent NFT
+        vm.prank(fakeWallet);
+        validator.onInstall(abi.encode(address(factory), uint256(999))); // Non-existent token ID
         
         bytes32 hash = keccak256("test message");
         bytes memory signature = hex"1234567890";
         
-        bytes4 result = validator.isValidSignatureWithSender(fakeWallet, hash, signature);
-        assertEq(result, ERC1271_INVALID);
+        // This should revert when trying to get owner of non-existent NFT
+        vm.prank(fakeWallet);
+        vm.expectRevert();
+        validator.isValidSignatureWithSender(fakeWallet, hash, signature);
     }
 
-    function testSetWalletTokenIdOnlyFactory() public {
-        address randomUser = makeAddr("randomUser");
-        address wallet = makeAddr("wallet");
+    function testPreCheckValidatesNFTOwner() public {
+        // Mint a wallet
+        vm.prank(user);
+        (, address wallet) = factory.mintWallet{value: MINTING_FEE}(user);
         
-        vm.prank(randomUser);
-        vm.expectRevert(NFTBoundValidator.InvalidFactory.selector);
-        validator.setWalletTokenId(wallet, 1);
+        // Test preCheck with correct owner
+        vm.prank(wallet);
+        bytes memory result = validator.preCheck(user, 0, "");
+        assertEq(result, hex"");
+        
+        // Test preCheck with wrong sender
+        vm.prank(wallet);
+        vm.expectRevert("NFTBoundValidator: sender is not NFT owner");
+        validator.preCheck(anotherUser, 0, "");
     }
 
     function testValidateUserOpWithFailedSignatureRecovery() public {
@@ -340,20 +352,17 @@ contract NFTBoundValidatorTest is Test {
         
         bytes32 userOpHash = keccak256("test");
         
+        vm.prank(wallet);
         uint256 result = validator.validateUserOp(userOp, userOpHash);
         assertEq(result, SIG_VALIDATION_FAILED_UINT);
     }
 
-    function testRecoverSignerFunction() public {
-        // Test the public recoverSigner function directly
-        bytes32 hash = keccak256("test message");
-        bytes32 ethSignedHash = ECDSA.toEthSignedMessageHash(hash);
+    function testPostCheckDoesNothing() public {
+        // Test that postCheck executes without reverting
+        vm.prank(makeAddr("wallet"));
+        validator.postCheck("");
         
-        // Create a valid signature
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, ethSignedHash);
-        bytes memory signature = abi.encodePacked(r, s, v);
-        
-        address recovered = validator.recoverSigner(ethSignedHash, signature);
-        assertEq(recovered, user);
+        // Should not revert and do nothing
+        assertTrue(true);
     }
 }

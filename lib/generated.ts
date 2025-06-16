@@ -5,13 +5,6 @@
 export const nftBoundValidatorAbi = [
   {
     type: 'function',
-    inputs: [{ name: '', internalType: 'address', type: 'address' }],
-    name: 'initialized',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     inputs: [
       { name: 'smartAccount', internalType: 'address', type: 'address' },
     ],
@@ -21,9 +14,7 @@ export const nftBoundValidatorAbi = [
   },
   {
     type: 'function',
-    inputs: [
-      { name: 'moduleTypeId', internalType: 'uint256', type: 'uint256' },
-    ],
+    inputs: [{ name: 'typeID', internalType: 'uint256', type: 'uint256' }],
     name: 'isModuleType',
     outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
     stateMutability: 'pure',
@@ -31,9 +22,9 @@ export const nftBoundValidatorAbi = [
   {
     type: 'function',
     inputs: [
-      { name: 'sender', internalType: 'address', type: 'address' },
+      { name: '', internalType: 'address', type: 'address' },
       { name: 'hash', internalType: 'bytes32', type: 'bytes32' },
-      { name: 'signature', internalType: 'bytes', type: 'bytes' },
+      { name: 'sig', internalType: 'bytes', type: 'bytes' },
     ],
     name: 'isValidSignatureWithSender',
     outputs: [{ name: '', internalType: 'bytes4', type: 'bytes4' }],
@@ -41,14 +32,17 @@ export const nftBoundValidatorAbi = [
   },
   {
     type: 'function',
-    inputs: [],
-    name: 'nftFactory',
-    outputs: [{ name: '', internalType: 'address', type: 'address' }],
+    inputs: [{ name: '', internalType: 'address', type: 'address' }],
+    name: 'nftBoundValidatorStorage',
+    outputs: [
+      { name: 'nftContract', internalType: 'address', type: 'address' },
+      { name: 'tokenId', internalType: 'uint256', type: 'uint256' },
+    ],
     stateMutability: 'view',
   },
   {
     type: 'function',
-    inputs: [{ name: 'data', internalType: 'bytes', type: 'bytes' }],
+    inputs: [{ name: '_data', internalType: 'bytes', type: 'bytes' }],
     name: 'onInstall',
     outputs: [],
     stateMutability: 'payable',
@@ -62,30 +56,31 @@ export const nftBoundValidatorAbi = [
   },
   {
     type: 'function',
+    inputs: [{ name: 'hookData', internalType: 'bytes', type: 'bytes' }],
+    name: 'postCheck',
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'msgSender', internalType: 'address', type: 'address' },
+      { name: 'value', internalType: 'uint256', type: 'uint256' },
+      { name: '', internalType: 'bytes', type: 'bytes' },
+    ],
+    name: 'preCheck',
+    outputs: [{ name: '', internalType: 'bytes', type: 'bytes' }],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
     inputs: [
       { name: 'hash', internalType: 'bytes32', type: 'bytes32' },
-      { name: 'signature', internalType: 'bytes', type: 'bytes' },
+      { name: 'sig', internalType: 'bytes', type: 'bytes' },
     ],
     name: 'recoverSigner',
     outputs: [{ name: '', internalType: 'address', type: 'address' }],
     stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_factory', internalType: 'address', type: 'address' }],
-    name: 'setFactory',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'wallet', internalType: 'address', type: 'address' },
-      { name: 'tokenId', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'setWalletTokenId',
-    outputs: [],
-    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -121,11 +116,29 @@ export const nftBoundValidatorAbi = [
     stateMutability: 'payable',
   },
   {
-    type: 'function',
-    inputs: [{ name: '', internalType: 'address', type: 'address' }],
-    name: 'walletToTokenId',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'kernel',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'nftContract',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'tokenId',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: true,
+      },
+    ],
+    name: 'NFTBound',
   },
   {
     type: 'error',
@@ -134,13 +147,12 @@ export const nftBoundValidatorAbi = [
     ],
     name: 'AlreadyInitialized',
   },
-  { type: 'error', inputs: [], name: 'InvalidFactory' },
+  { type: 'error', inputs: [], name: 'InvalidNFTContract' },
   {
     type: 'error',
     inputs: [{ name: 'target', internalType: 'address', type: 'address' }],
     name: 'InvalidTargetAddress',
   },
-  { type: 'error', inputs: [], name: 'InvalidWallet' },
   {
     type: 'error',
     inputs: [
